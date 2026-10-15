@@ -1,0 +1,30 @@
+[build-system]
+requires = ["hatchling>=1.25"]
+build-backend = "hatchling.build"
+
+[project]
+name = "problem-discovery-agents"
+version = "0.1.0"
+description = "Configuration foundation for an evidence-grounded problem-discovery research pilot."
+readme = "README.md"
+requires-python = ">=3.11,<3.14"
+license = { file = "LICENSE" }
+dependencies = [
+  "crewai>=1.8,<2",
+  "httpx>=0.27,<1",
+  "pydantic-settings>=2.7,<3",
+  "python-dotenv>=1.0,<2",
+  "tavily-python>=0.7,<1",
+]
+
+[dependency-groups]
+dev = [
+  "pytest>=8.3,<9",
+]
+
+[tool.hatch.build.targets.wheel]
+packages = ["src/problem_discovery_agents"]
+
+[tool.pytest.ini_options]
+addopts = "-q"
+testpaths = ["tests"]

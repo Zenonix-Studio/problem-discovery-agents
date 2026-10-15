@@ -32,7 +32,48 @@ Stage 1 assesses four user-value dimensions—Problem Reality, Frequency / Recur
 
 ## Status
 
-The research policy and implementation contracts are agreed; implementation is pending. Before writing code, read [`AGENTS.md`](AGENTS.md) and the linked decision records in the required order. Credentials must be provided through configuration or environment variables and must never be committed.
+M1 provides the project foundation and configuration boundary. Agents, research tools, contracts, scoring, persistence, and Flow orchestration are not implemented yet. Before changing later milestones, read [`AGENTS.md`](AGENTS.md) and its linked decision records in the required order.
+
+## Local setup (M1)
+
+Prerequisite: Python 3.11–3.13 and [uv](https://docs.astral.sh/uv/). The repository's development baseline is Python 3.12.
+
+```bash
+cp .env.example .env
+# Edit .env with real values only when preparing an authorized future live run.
+uv sync --all-groups
+uv run pytest
+```
+
+Tests use only placeholder credentials and fake model wrappers; they do not call GitHub, Tavily, or an LLM provider.
+
+Configuration is loaded only through `problem_discovery_agents.settings`, using these environment variables (or their counterparts in a local `.env`):
+
+| Setting | Default / purpose |
+| --- | --- |
+| `PDA_GITHUB_TOKEN` | Required authenticated GitHub token for a future tool run. |
+| `PDA_TAVILY_API_KEY` | Required Tavily key for a future tool run. |
+| `PDA_LLM_API_KEY` | Required LLM provider credential. |
+| `PDA_LLM_PROVIDER` | `openai`; the only currently configured provider adapter. |
+| `PDA_LLM_MODEL` | `gpt-5.4-mini`; configurable without changing agent code. |
+| `PDA_LLM_REASONING_EFFORT` | `medium`; accepted values are `none`, `low`, `medium`, `high`, and `xhigh`. |
+| `PDA_LLM_BASE_URL` | Optional OpenAI-compatible endpoint. |
+| `PDA_LOG_LEVEL` | `INFO`; one of `DEBUG`, `INFO`, `WARNING`, `ERROR`. |
+| `PDA_RECORD_PROVIDER_USAGE` | `true`; future runs record provider-supplied usage/cost metadata only. |
+
+Run the local, non-network configuration check after setting placeholder or real values:
+
+```bash
+uv run python -m problem_discovery_agents.config_check
+```
+
+It reports missing or unsupported configuration without revealing values, then constructs the local CrewAI wrapper without invoking it. This checks local package/argument compatibility only; it does not prove account access or remote model availability. OpenAI's current model documentation lists `gpt-5.4-mini` and supports `medium` reasoning effort; a live smoke test still requires separate authorization and credentials.
+
+Never commit `.env` or real keys. The committed [`.env.example`](.env.example) contains placeholders only.
+
+### Logging and usage-cost policy
+
+M1 uses no telemetry service. Future application code should configure standard-library logging at its boundary and never log credentials or full provider responses. It may record input/output/reasoning token counts and estimated **model** cost only when supplied by provider metadata. Missing values remain unknown; search/retrieval costs are kept separate and are not estimated.
 
 ## First-pilot acceptance
 
