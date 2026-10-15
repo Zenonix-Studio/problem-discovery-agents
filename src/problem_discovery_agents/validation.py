@@ -52,6 +52,30 @@ def _check_references(label: str, ids: Iterable[str], available: set[str], error
             errors.append(f"{label} references unknown ID {item_id!r}")
 
 
+def validate_research_output(research: ResearchOutput) -> None:
+    """Validate the Finding-to-Evidence handoff available after M4.
+
+    This intentionally does not require placeholder Analysis or Evaluation
+    outputs.  Pydantic validates individual fields and ``EvidenceRegistry``
+    validates duplicate Evidence IDs; this helper owns the cross-record
+    Finding namespace and references.
+    """
+
+    errors: list[str] = []
+    finding_duplicates = _duplicates(finding.finding_id for finding in research.findings)
+    if finding_duplicates:
+        errors.append(f"duplicate Finding IDs: {', '.join(finding_duplicates)}")
+
+    evidence_ids = set(research.evidence_registry.by_id())
+    for finding in research.findings:
+        _check_references(
+            f"Finding {finding.finding_id}", finding.evidence_ids, evidence_ids, errors
+        )
+
+    if errors:
+        raise ContractValidationError(errors)
+
+
 def _validate_assessment(
     label: str, assessment: ScoreAssessment, evidence_ids: set[str], errors: list[str]
 ) -> None:
@@ -77,9 +101,10 @@ def validate_handoffs(
 
     errors: list[str] = []
     findings = {finding.finding_id: finding for finding in research.findings}
-    finding_duplicates = _duplicates(finding.finding_id for finding in research.findings)
-    if finding_duplicates:
-        errors.append(f"duplicate Finding IDs: {', '.join(finding_duplicates)}")
+    try:
+        validate_research_output(research)
+    except ContractValidationError as error:
+        errors.extend(error.violations)
 
     try:
         registry = research.evidence_registry.merge(analysis.evidence_registry_delta)
@@ -87,9 +112,6 @@ def validate_handoffs(
         errors.append(str(error))
         registry = research.evidence_registry
     evidence_ids = set(registry.by_id())
-
-    for finding in research.findings:
-        _check_references(f"Finding {finding.finding_id}", finding.evidence_ids, evidence_ids, errors)
 
     problem_duplicates = _duplicates(problem.problem_id for problem in analysis.problems)
     if problem_duplicates:

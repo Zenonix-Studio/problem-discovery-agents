@@ -32,7 +32,7 @@ Stage 1 assesses four user-value dimensions—Problem Reality, Frequency / Recur
 
 ## Status
 
-M1 provides the project foundation and configuration boundary. M2 adds typed Pydantic handoff contracts, an authoritative in-memory evidence registry, and deterministic integrity/Stage 1 scoring checks. M3 adds small injected-client GitHub REST/Discussions GraphQL and Tavily Search/Extract adapters. Agents, persistence, and Flow orchestration are not implemented yet. Before changing later milestones, read [`AGENTS.md`](AGENTS.md) and its linked decision records in the required order.
+M1 provides the project foundation and configuration boundary. M2 adds typed Pydantic handoff contracts, an authoritative in-memory evidence registry, and deterministic integrity/Stage 1 scoring checks. M3 adds small injected-client GitHub REST/Discussions GraphQL and Tavily Search/Extract adapters. M4 adds a fixture-testable two-pass Research Agent service: it accepts only the pilot category, runs broad discovery followed by deepening, constructs the authoritative `ResearchOutput`, and calls a research-only Finding-to-Evidence validator. M7 will integrate it into the Flow and persist run artifacts.
 
 M2 validators are structural: they resolve IDs, reject unsafe registry merges, derive the four-dimension Stage 1 `/12` result, and enforce the Stage 2 gate. They deliberately do not certify source truth, independence, clustering, or score quality; those remain research and human-review responsibilities.
 
@@ -69,6 +69,23 @@ Run the M3 offline tests with:
 
 ```bash
 uv run pytest tests/test_research_tools_http.py tests/test_github_tools.py tests/test_tavily_tools.py
+```
+
+### Research Agent (M4)
+
+`problem_discovery_agents.research_agent.ResearchAgent` is intentionally an
+injected service until M7 supplies Flow wiring. It receives a structured
+two-pass planner and a M3-shaped `search`/`extract` tool boundary, so its tests
+have no credentials or network calls. It accepts `ResearchRequest` with the
+pilot category and optional workflow focus, then returns an in-memory
+`ResearchRunResult` containing validated `ResearchOutput` plus query
+diagnostics. Search leads must be inspected before they can become evidence;
+inaccessible originals remain `unverified` with no excerpt.
+
+Run the M4 offline tests with:
+
+```bash
+uv run pytest tests/test_research_agent.py tests/test_validation.py
 ```
 
 Configuration is loaded only through `problem_discovery_agents.settings`, using these environment variables (or their counterparts in a local `.env`):

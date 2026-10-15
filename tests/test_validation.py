@@ -24,7 +24,12 @@ from problem_discovery_agents.contracts import (
     Stage2Assessment,
     VerificationStatus,
 )
-from problem_discovery_agents.validation import ContractValidationError, stage1_result, validate_handoffs
+from problem_discovery_agents.validation import (
+    ContractValidationError,
+    stage1_result,
+    validate_handoffs,
+    validate_research_output,
+)
 
 
 def _evidence() -> EvidenceItem:
@@ -148,6 +153,16 @@ def test_duplicate_finding_and_problem_ids_fail() -> None:
 
     assert "duplicate Finding IDs: F-001" in str(raised.value)
     assert "duplicate Problem IDs: P-001" in str(raised.value)
+
+
+def test_research_only_validation_does_not_need_downstream_placeholders() -> None:
+    scores = Stage1Scores(problem_reality=_scored(3), frequency_recurrence=_scored(3), alternative_gap=_scored(2), meaningful_benefit=_scored(2))
+    research, _, _ = _chain(scores, total=10, status=Stage1Status.STRONG)
+    validate_research_output(research)
+
+    research.findings[0].evidence_ids = ["EV-missing"]
+    with pytest.raises(ContractValidationError, match="Finding F-001 references unknown ID 'EV-missing'"):
+        validate_research_output(research)
 
 
 def test_alternative_gap_outcome_is_a_closed_vocabulary() -> None:
