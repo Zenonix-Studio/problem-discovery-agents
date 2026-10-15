@@ -32,7 +32,7 @@ Stage 1 assesses four user-value dimensions—Problem Reality, Frequency / Recur
 
 ## Status
 
-M1 provides the project foundation and configuration boundary. M2 adds typed Pydantic handoff contracts, an authoritative in-memory evidence registry, and deterministic integrity/Stage 1 scoring checks. M3 adds small injected-client GitHub REST/Discussions GraphQL and Tavily Search/Extract adapters. M4 adds a fixture-testable two-pass Research Agent service: it accepts only the pilot category, runs broad discovery followed by deepening, constructs the authoritative `ResearchOutput`, and calls a research-only Finding-to-Evidence validator. M5 adds an injected, single-pass Analysis Agent service that clusters findings, checks bounded alternatives/current status/counterevidence, returns a validated `AnalysisOutput`, and exposes the safely merged in-memory evidence registry. M6 adds an injected Evaluation Agent service: it requires one evaluation for every analyzed problem, derives Stage 1 totals/labels and Stage 2 eligibility in Python, conditionally obtains Stage 2 from the same agent instance, and returns one structurally checked Markdown report in memory. M7 will integrate the services into the Flow and persist run artifacts.
+M1 provides the project foundation and configuration boundary. M2 adds typed Pydantic handoff contracts, an authoritative in-memory evidence registry, and deterministic integrity/Stage 1 scoring checks. M3 adds small injected-client GitHub REST/Discussions GraphQL and Tavily Search/Extract adapters. M4 adds a fixture-testable two-pass Research Agent service: it accepts only the pilot category, runs broad discovery followed by deepening, constructs the authoritative `ResearchOutput`, and calls a research-only Finding-to-Evidence validator. M5 adds an injected, single-pass Analysis Agent service that clusters findings, checks bounded alternatives/current status/counterevidence, returns a validated `AnalysisOutput`, and exposes the safely merged in-memory evidence registry. M6 adds an injected Evaluation Agent service: it requires one evaluation for every analyzed problem, derives Stage 1 totals/labels and Stage 2 eligibility in Python, conditionally obtains Stage 2 from the same agent instance, and returns one structurally checked Markdown report in memory. M7 runs those existing services once in a CrewAI Flow and persists validated handoffs plus the final report.
 
 M2 validators are structural: they resolve IDs, reject unsafe registry merges, derive the four-dimension Stage 1 `/12` result, and enforce the Stage 2 gate. They deliberately do not certify source truth, independence, clustering, or score quality; those remain research and human-review responsibilities.
 
@@ -120,6 +120,30 @@ Run the M6 offline tests with:
 
 ```bash
 uv run pytest tests/test_evaluation_agent.py tests/test_validation.py
+```
+
+### Flow and artifacts (M7)
+
+M7 writes each validated stage to a unique directory under `artifacts/` by default.
+Successful runs contain `research_output.json`, `analysis_output.json`,
+`evaluation_output.json`, `evidence_registry.json`, one `report.md`, and a safe
+`run_manifest.json`. A failed run keeps only earlier validated artifacts and a
+failed manifest; it never creates a later-stage artifact.
+
+After configuring real credentials, manually invoke the pilot with:
+
+```bash
+uv run python -m problem_discovery_agents.run \
+  --category 'Developer Tools & Productivity' \
+  --focus 'CI/CD troubleshooting'
+```
+
+The focus is optional. Model usage/cost is recorded only when provider metadata
+is returned; missing or incomplete totals remain explicitly unknown. M7 tests
+use fakes and do not call external services:
+
+```bash
+uv run pytest tests/test_flow.py tests/test_artifacts.py tests/test_run.py tests/test_observability.py
 ```
 
 Configuration is loaded only through `problem_discovery_agents.settings`, using these environment variables (or their counterparts in a local `.env`):
