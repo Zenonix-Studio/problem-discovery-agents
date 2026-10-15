@@ -7,6 +7,10 @@ from collections.abc import Iterable
 from .contracts import (
     AnalysisOutput,
     EvaluationOutput,
+    EvidenceRegistry,
+    GapOutcome,
+    Independence,
+    ProblemStatus,
     ResearchOutput,
     ScoreAssessment,
     Stage1Scores,
@@ -76,6 +80,74 @@ def validate_research_output(research: ResearchOutput) -> None:
         raise ContractValidationError(errors)
 
 
+def validate_analysis_output(
+    research: ResearchOutput, analysis: AnalysisOutput
+) -> EvidenceRegistry:
+    """Validate the Analysis handoff and return its one merged evidence registry."""
+
+    errors: list[str] = []
+    try:
+        validate_research_output(research)
+    except ContractValidationError as error:
+        errors.extend(error.violations)
+
+    try:
+        registry = research.evidence_registry.merge(analysis.evidence_registry_delta)
+    except ValueError as error:
+        errors.append(str(error))
+        registry = research.evidence_registry
+
+    findings = {finding.finding_id for finding in research.findings}
+    evidence_ids = set(registry.by_id())
+    duplicates = _duplicates(problem.problem_id for problem in analysis.problems)
+    if duplicates:
+        errors.append(f"duplicate Problem IDs: {', '.join(duplicates)}")
+    for problem in analysis.problems:
+        _check_references(f"Problem {problem.problem_id}.finding_ids", problem.finding_ids, findings, errors)
+        _check_references(f"Problem {problem.problem_id}.evidence_ids", problem.evidence_ids, evidence_ids, errors)
+        _check_references(
+            f"Problem {problem.problem_id}.counterevidence_ids",
+            problem.counterevidence_ids,
+            evidence_ids,
+            errors,
+        )
+        if not problem.status_rationale.strip():
+            errors.append(f"Problem {problem.problem_id}.status_rationale must not be blank")
+        if problem.status is ProblemStatus.CORROBORATED:
+            independent_firsthand = [
+                evidence_id for evidence_id in problem.evidence_ids
+                if evidence_id in registry.by_id()
+                and registry.by_id()[evidence_id].independence is Independence.INDEPENDENT
+                and registry.by_id()[evidence_id].evidence_class == "firsthand"
+            ]
+            if len(independent_firsthand) < 2:
+                errors.append(
+                    f"Problem {problem.problem_id} is corroborated but lacks two linked independent firsthand Evidence IDs"
+                )
+        if problem.status in {ProblemStatus.OUTDATED, ProblemStatus.CONTRADICTED} and not problem.counterevidence_ids:
+            errors.append(
+                f"Problem {problem.problem_id} is {problem.status.value} but lacks linked counterevidence"
+            )
+        for alternative in problem.alternatives:
+            _check_references(
+                f"Problem {problem.problem_id}.alternative[{alternative.name}].evidence_ids",
+                alternative.evidence_ids,
+                evidence_ids,
+                errors,
+            )
+            if alternative.gap_outcome in {
+                GapOutcome.SUPPORTED_GAP,
+                GapOutcome.NEED_SUBSTANTIALLY_MET,
+            } and not alternative.evidence_ids:
+                errors.append(
+                    f"Problem {problem.problem_id}.alternative[{alternative.name}] has "
+                    f"{alternative.gap_outcome.value} without linked Evidence IDs"
+                )
+    if errors:
+        raise ContractValidationError(errors)
+    return registry
+
+
 def _validate_assessment(
     label: str, assessment: ScoreAssessment, evidence_ids: set[str], errors: list[str]
 ) -> None:
@@ -100,39 +172,13 @@ def validate_handoffs(
     """Fail fast on structural and derived-state violations across all handoffs."""
 
     errors: list[str] = []
-    findings = {finding.finding_id: finding for finding in research.findings}
     try:
-        validate_research_output(research)
+        registry = validate_analysis_output(research, analysis)
     except ContractValidationError as error:
         errors.extend(error.violations)
-
-    try:
-        registry = research.evidence_registry.merge(analysis.evidence_registry_delta)
-    except ValueError as error:
-        errors.append(str(error))
         registry = research.evidence_registry
     evidence_ids = set(registry.by_id())
-
-    problem_duplicates = _duplicates(problem.problem_id for problem in analysis.problems)
-    if problem_duplicates:
-        errors.append(f"duplicate Problem IDs: {', '.join(problem_duplicates)}")
     problem_ids = {problem.problem_id for problem in analysis.problems}
-    for problem in analysis.problems:
-        _check_references(f"Problem {problem.problem_id}.finding_ids", problem.finding_ids, set(findings), errors)
-        _check_references(f"Problem {problem.problem_id}.evidence_ids", problem.evidence_ids, evidence_ids, errors)
-        _check_references(
-            f"Problem {problem.problem_id}.counterevidence_ids",
-            problem.counterevidence_ids,
-            evidence_ids,
-            errors,
-        )
-        for alternative in problem.alternatives:
-            _check_references(
-                f"Problem {problem.problem_id}.alternative[{alternative.name}].evidence_ids",
-                alternative.evidence_ids,
-                evidence_ids,
-                errors,
-            )
 
     evaluation_duplicates = _duplicates(record.problem_id for record in evaluation.evaluations)
     if evaluation_duplicates:

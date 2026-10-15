@@ -32,7 +32,7 @@ Stage 1 assesses four user-value dimensions—Problem Reality, Frequency / Recur
 
 ## Status
 
-M1 provides the project foundation and configuration boundary. M2 adds typed Pydantic handoff contracts, an authoritative in-memory evidence registry, and deterministic integrity/Stage 1 scoring checks. M3 adds small injected-client GitHub REST/Discussions GraphQL and Tavily Search/Extract adapters. M4 adds a fixture-testable two-pass Research Agent service: it accepts only the pilot category, runs broad discovery followed by deepening, constructs the authoritative `ResearchOutput`, and calls a research-only Finding-to-Evidence validator. M7 will integrate it into the Flow and persist run artifacts.
+M1 provides the project foundation and configuration boundary. M2 adds typed Pydantic handoff contracts, an authoritative in-memory evidence registry, and deterministic integrity/Stage 1 scoring checks. M3 adds small injected-client GitHub REST/Discussions GraphQL and Tavily Search/Extract adapters. M4 adds a fixture-testable two-pass Research Agent service: it accepts only the pilot category, runs broad discovery followed by deepening, constructs the authoritative `ResearchOutput`, and calls a research-only Finding-to-Evidence validator. M5 adds an injected, single-pass Analysis Agent service that clusters findings, checks bounded alternatives/current status/counterevidence, returns a validated `AnalysisOutput`, and exposes the safely merged in-memory evidence registry. M7 will integrate the services into the Flow and persist run artifacts.
 
 M2 validators are structural: they resolve IDs, reject unsafe registry merges, derive the four-dimension Stage 1 `/12` result, and enforce the Stage 2 gate. They deliberately do not certify source truth, independence, clustering, or score quality; those remain research and human-review responsibilities.
 
@@ -86,6 +86,23 @@ Run the M4 offline tests with:
 
 ```bash
 uv run pytest tests/test_research_agent.py tests/test_validation.py
+```
+
+### Analysis Agent (M5)
+
+`problem_discovery_agents.analysis_agent.AnalysisAgent` accepts validated
+`ResearchOutput`, uses an injected structured planner and the existing M3-shaped
+`search`/`extract` boundary, and performs no Flow run or filesystem persistence.
+Only sources returned as discovery leads and then inspected become analysis-registry
+entries. `AnalysisRunResult` exposes both the delta-shaped `AnalysisOutput` and the
+single safely merged registry. The agent records uncertainty rather than inferring a
+fix from open/closed metadata, and it does not score candidates or request research
+reruns.
+
+Run the M5 offline tests with:
+
+```bash
+uv run pytest tests/test_analysis_agent.py tests/test_validation.py
 ```
 
 Configuration is loaded only through `problem_discovery_agents.settings`, using these environment variables (or their counterparts in a local `.env`):

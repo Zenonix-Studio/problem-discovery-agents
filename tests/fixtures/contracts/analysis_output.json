@@ -6,6 +6,7 @@
     "user_segment": "developers",
     "workflow": "CI debugging",
     "clustering_rationale": "One finding describes the workflow friction.",
+    "status_rationale": "One report needs further validation.",
     "evidence_ids": ["EV-001"],
     "independence_context": "One independent report.",
     "alternatives": [{

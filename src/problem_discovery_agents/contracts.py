@@ -171,6 +171,7 @@ class Problem(ContractModel):
     user_segment: str
     workflow: str
     clustering_rationale: str
+    status_rationale: str
     evidence_ids: list[str] = Field(min_length=1)
     independence_context: str
     alternatives: list[Alternative] = Field(default_factory=list)
@@ -181,6 +182,7 @@ class Problem(ContractModel):
 
     _text = field_validator(
         "problem_id", "statement", "user_segment", "workflow", "clustering_rationale",
+        "status_rationale",
         "independence_context", "current_resolution_uncertainty",
     )(_nonblank)
 

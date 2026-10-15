@@ -47,7 +47,7 @@ def _chain(scores: Stage1Scores, *, total: int | None, status: Stage1Status, sta
         findings=[Finding(finding_id="F-001", category="Developer Tools & Productivity", user_segment="developers", workflow="CI debugging", friction_hypothesis="Users struggle to identify CI failures.", evidence_ids=["EV-001"])],
         evidence_registry=EvidenceRegistry(evidence=[_evidence()]), research_coverage=ResearchCoverage(),
     )
-    analysis = AnalysisOutput(problems=[Problem(problem_id="P-001", finding_ids=["F-001"], statement="Developers struggle to diagnose CI failures.", user_segment="developers", workflow="CI debugging", clustering_rationale="Same workflow and friction.", evidence_ids=["EV-001"], independence_context="One independent report.", current_resolution_uncertainty="Current resolution is unknown.", status=ProblemStatus.NEEDS_VALIDATION)])
+    analysis = AnalysisOutput(problems=[Problem(problem_id="P-001", finding_ids=["F-001"], statement="Developers struggle to diagnose CI failures.", user_segment="developers", workflow="CI debugging", clustering_rationale="Same workflow and friction.", status_rationale="One report requires further validation.", evidence_ids=["EV-001"], independence_context="One independent report.", current_resolution_uncertainty="Current resolution is unknown.", status=ProblemStatus.NEEDS_VALIDATION)])
     evaluation = EvaluationOutput(evaluations=[EvaluationRecord(problem_id="P-001", stage1_scores=scores, stage1_total=total, stage1_status=status, user_benefit="Fewer repeated debugging steps." if stage2 else None, stage2_assessment=Stage2Assessment(assessments={"feasibility": {"value": "Partial", "rationale": "Requires later validation."}}) if stage2 else None)])
     return research, analysis, evaluation
 
@@ -176,6 +176,7 @@ def test_alternative_gap_outcome_is_a_closed_vocabulary() -> None:
                 "user_segment": "developers",
                 "workflow": "CI",
                 "clustering_rationale": "A rationale.",
+                "status_rationale": "A status rationale.",
                 "evidence_ids": ["EV-001"],
                 "independence_context": "Known.",
                 "alternatives": [{"name": "Built-in", "kind": "built-in", "what_it_solves": "Part of the task.", "gap_outcome": "maybe"}],
@@ -195,6 +196,7 @@ def test_invalid_problem_status_is_rejected() -> None:
                 "user_segment": "developers",
                 "workflow": "CI",
                 "clustering_rationale": "A rationale.",
+                "status_rationale": "A status rationale.",
                 "evidence_ids": ["EV-001"],
                 "independence_context": "Known.",
                 "current_resolution_uncertainty": "Unknown.",
