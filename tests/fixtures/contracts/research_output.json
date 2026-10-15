@@ -1,0 +1,26 @@
+{
+  "findings": [{
+    "finding_id": "F-001",
+    "category": "Developer Tools & Productivity",
+    "user_segment": "developers",
+    "workflow": "CI debugging",
+    "friction_hypothesis": "Users struggle to identify CI failures.",
+    "evidence_ids": ["EV-001"]
+  }],
+  "evidence_registry": {"evidence": [{
+    "evidence_id": "EV-001",
+    "source_url": "https://example.test/original",
+    "source_type": "GitHub Issue",
+    "published_at": null,
+    "accessed_at": "2026-10-15",
+    "source_excerpt": null,
+    "observation": "The source supports this bounded observation.",
+    "interpretation": null,
+    "evidence_class": "firsthand",
+    "independence": "independent",
+    "independence_rationale": "A distinct author reports their experience.",
+    "verification_status": "verified",
+    "limitations": "Small sample."
+  }]},
+  "research_coverage": {"examined_workflows": ["CI debugging"]}
+}

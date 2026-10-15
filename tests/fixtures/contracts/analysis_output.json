@@ -1,0 +1,20 @@
+{
+  "problems": [{
+    "problem_id": "P-001",
+    "finding_ids": ["F-001"],
+    "statement": "Developers struggle to diagnose CI failures.",
+    "user_segment": "developers",
+    "workflow": "CI debugging",
+    "clustering_rationale": "One finding describes the workflow friction.",
+    "evidence_ids": ["EV-001"],
+    "independence_context": "One independent report.",
+    "alternatives": [{
+      "name": "Built-in CI logs",
+      "kind": "built-in capability",
+      "what_it_solves": "Shows job output.",
+      "gap_outcome": "unknown_gap"
+    }],
+    "current_resolution_uncertainty": "Current resolution is unknown.",
+    "status": "needs_validation"
+  }]
+}

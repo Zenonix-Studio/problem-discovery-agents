@@ -1,0 +1,15 @@
+{
+  "evaluations": [{
+    "problem_id": "P-001",
+    "stage1_scores": {
+      "problem_reality": {"score": 3, "rationale": "Evidence supports the score.", "evidence_ids": ["EV-001"]},
+      "frequency_recurrence": {"score": 3, "rationale": "Evidence supports the score.", "evidence_ids": ["EV-001"]},
+      "alternative_gap": {"score": 2, "rationale": "Evidence supports the score.", "evidence_ids": ["EV-001"]},
+      "meaningful_benefit": {"score": 2, "rationale": "Evidence supports the score.", "evidence_ids": ["EV-001"]}
+    },
+    "stage1_total": 10,
+    "stage1_status": "Strong",
+    "user_benefit": "Fewer repeated debugging steps.",
+    "stage2_assessment": {"assessments": {"feasibility": {"value": "Partial", "rationale": "Needs validation."}}}
+  }]
+}

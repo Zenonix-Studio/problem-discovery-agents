@@ -32,7 +32,9 @@ Stage 1 assesses four user-value dimensions—Problem Reality, Frequency / Recur
 
 ## Status
 
-M1 provides the project foundation and configuration boundary. Agents, research tools, contracts, scoring, persistence, and Flow orchestration are not implemented yet. Before changing later milestones, read [`AGENTS.md`](AGENTS.md) and its linked decision records in the required order.
+M1 provides the project foundation and configuration boundary. M2 adds typed Pydantic handoff contracts, an authoritative in-memory evidence registry, and deterministic integrity/Stage 1 scoring checks. Agents, research tools, persistence, and Flow orchestration are not implemented yet. Before changing later milestones, read [`AGENTS.md`](AGENTS.md) and its linked decision records in the required order.
+
+M2 validators are structural: they resolve IDs, reject unsafe registry merges, derive the four-dimension Stage 1 `/12` result, and enforce the Stage 2 gate. They deliberately do not certify source truth, independence, clustering, or score quality; those remain research and human-review responsibilities.
 
 ## Local setup (M1)
 

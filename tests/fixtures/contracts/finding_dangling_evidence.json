@@ -1,0 +1,8 @@
+{
+  "finding_id": "F-001",
+  "category": "Developer Tools & Productivity",
+  "user_segment": "developers",
+  "workflow": "CI debugging",
+  "friction_hypothesis": "Users struggle to identify CI failures.",
+  "evidence_ids": ["EV-MISSING"]
+}

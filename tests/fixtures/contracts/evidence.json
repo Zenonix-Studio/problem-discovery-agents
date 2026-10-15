@@ -1,0 +1,15 @@
+{
+  "evidence_id": "EV-001",
+  "source_url": "https://example.test/original",
+  "source_type": "GitHub Issue",
+  "published_at": null,
+  "accessed_at": "2026-10-15",
+  "source_excerpt": null,
+  "observation": "The source supports this bounded observation.",
+  "interpretation": null,
+  "evidence_class": "firsthand",
+  "independence": "uncertain",
+  "independence_rationale": "Author relationship is not known.",
+  "verification_status": "partial",
+  "limitations": "The full thread was unavailable."
+}
