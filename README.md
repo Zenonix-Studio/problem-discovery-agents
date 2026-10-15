@@ -32,7 +32,7 @@ Stage 1 assesses four user-value dimensions—Problem Reality, Frequency / Recur
 
 ## Status
 
-M1 provides the project foundation and configuration boundary. M2 adds typed Pydantic handoff contracts, an authoritative in-memory evidence registry, and deterministic integrity/Stage 1 scoring checks. Agents, research tools, persistence, and Flow orchestration are not implemented yet. Before changing later milestones, read [`AGENTS.md`](AGENTS.md) and its linked decision records in the required order.
+M1 provides the project foundation and configuration boundary. M2 adds typed Pydantic handoff contracts, an authoritative in-memory evidence registry, and deterministic integrity/Stage 1 scoring checks. M3 adds small injected-client GitHub REST/Discussions GraphQL and Tavily Search/Extract adapters. Agents, persistence, and Flow orchestration are not implemented yet. Before changing later milestones, read [`AGENTS.md`](AGENTS.md) and its linked decision records in the required order.
 
 M2 validators are structural: they resolve IDs, reject unsafe registry merges, derive the four-dimension Stage 1 `/12` result, and enforce the Stage 2 gate. They deliberately do not certify source truth, independence, clustering, or score quality; those remain research and human-review responsibilities.
 
@@ -48,6 +48,28 @@ uv run pytest
 ```
 
 Tests use only placeholder credentials and fake model wrappers; they do not call GitHub, Tavily, or an LLM provider.
+
+### Research-tool boundary (M3)
+
+`problem_discovery_agents.research_tools` exposes REST-first GitHub retrieval
+(repository, issue/PR, issue comments, PR review submissions, and inline review
+comments), a fixed GitHub Discussions GraphQL operation, and Tavily Search and
+Extract. Adapters require a `Settings` instance plus an injected `httpx.Client`;
+this keeps unit tests offline and prevents direct environment reads in tool code.
+
+Search results are discovery leads only: their snippets are not verified source
+content or evidence excerpts. Extracted material and incomplete/inaccessible
+sources retain URLs, limitations, states and safe errors for later Research or
+Analysis work. GitHub `open`/`closed` state is preserved as metadata only and is
+not a conclusion that a friction persists or was resolved. Live use needs valid
+credentials and later M4/M5 wiring; it is not a standalone evidence-verification
+claim.
+
+Run the M3 offline tests with:
+
+```bash
+uv run pytest tests/test_research_tools_http.py tests/test_github_tools.py tests/test_tavily_tools.py
+```
 
 Configuration is loaded only through `problem_discovery_agents.settings`, using these environment variables (or their counterparts in a local `.env`):
 
