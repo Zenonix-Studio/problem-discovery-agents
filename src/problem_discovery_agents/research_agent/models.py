@@ -10,6 +10,8 @@ from datetime import date
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
+from ..contracts import EvidenceClass
+
 
 PILOT_CATEGORY = "Developer Tools & Productivity"
 
@@ -60,7 +62,7 @@ class CandidateSignal(_StrictModel):
     workflow: str
     friction_hypothesis: str
     observation: str | None = None
-    evidence_class: str = "firsthand"
+    evidence_class: EvidenceClass = "firsthand"
     interpretation: str | None = None
 
     _text = field_validator(

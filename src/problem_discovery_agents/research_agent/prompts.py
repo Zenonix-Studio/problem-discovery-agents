@@ -26,4 +26,9 @@ records. Search snippets are discovery leads, not source evidence: do not turn t
 observations, or verification claims. Do not propose solutions, score, assert demand or current
 resolution, or fill a quota. About 8–10 Pass 1 and 4–5 Pass 2 selections are provisional upper
 guides, not quotas; fewer or none are acceptable.
+Set evidence_class to exactly one of these values (never the source type or any other text):
+firsthand: the author describes their own experience or failure.
+documentation: maintainer or vendor docs, release notes, or other non-user statements.
+technical_verification: a reproducible technical check or confirmation of the behavior.
+When the class is unclear from the lead, prefer documentation over firsthand.
 """

@@ -4,7 +4,7 @@ from __future__ import annotations
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
 
-from ..contracts import AnalysisOutput, GapOutcome, ProblemStatus, EvidenceRegistry
+from ..contracts import AnalysisOutput, EvidenceClass, EvidenceRegistry, GapOutcome, ProblemStatus
 
 
 class _StrictModel(BaseModel):
@@ -26,7 +26,7 @@ class RetrievalIntent(_StrictModel):
 
 class SourceRequest(_StrictModel):
     source_url: str
-    evidence_class: str = "documentation"
+    evidence_class: EvidenceClass = "documentation"
 
     _text = field_validator("source_url", "evidence_class")(_nonblank)
 

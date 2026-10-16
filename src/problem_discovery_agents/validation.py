@@ -5,6 +5,7 @@ from __future__ import annotations
 from collections.abc import Iterable
 
 from .contracts import (
+    FIRSTHAND,
     AnalysisOutput,
     EvaluationOutput,
     EvidenceRegistry,
@@ -118,7 +119,7 @@ def validate_analysis_output(
                 evidence_id for evidence_id in problem.evidence_ids
                 if evidence_id in registry.by_id()
                 and registry.by_id()[evidence_id].independence is Independence.INDEPENDENT
-                and registry.by_id()[evidence_id].evidence_class == "firsthand"
+                and registry.by_id()[evidence_id].evidence_class == FIRSTHAND
             ]
             if len(independent_firsthand) < 2:
                 errors.append(

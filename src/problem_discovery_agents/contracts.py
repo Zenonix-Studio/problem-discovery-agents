@@ -9,6 +9,7 @@ from __future__ import annotations
 
 from datetime import date
 from enum import StrEnum
+from typing import Literal
 
 from pydantic import (
     AnyHttpUrl,
@@ -19,6 +20,12 @@ from pydantic import (
     field_validator,
     model_validator,
 )
+
+
+# Model-proposed evidence classes. "unverified_source_lead" is assigned by code
+# for inaccessible sources and is never chosen by a model.
+EvidenceClass = Literal["firsthand", "documentation", "technical_verification"]
+FIRSTHAND: EvidenceClass = "firsthand"
 
 
 class ContractModel(BaseModel):

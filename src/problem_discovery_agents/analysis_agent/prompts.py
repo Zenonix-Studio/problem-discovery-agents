@@ -12,6 +12,11 @@ or source result. Open and closed issue metadata alone do not prove unresolved o
 Use only corroborated, needs_validation, outdated, or contradicted statuses, each with
 an evidence-linked rationale and explicit uncertainty. A supported gap needs direct
 support; otherwise use unknown_gap. Preserve counterevidence and research gaps.
+Use corroborated only when at least two linked evidence items are independent and firsthand;
+otherwise use needs_validation. Evidence classes are exactly one of:
+firsthand: the author describes their own experience or failure.
+documentation: maintainer or vendor docs, release notes, or other non-user statements.
+technical_verification: a reproducible technical check or confirmation of the behavior.
 Do not propose a product or solution, score user value, claim validated demand, rate
 career fit, or create an automatic Research-Agent rerun.
 """.strip()
