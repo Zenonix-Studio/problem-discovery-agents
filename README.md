@@ -177,3 +177,9 @@ M1 uses no telemetry service. Future application code should configure standard-
 ## First-pilot acceptance
 
 Human review is mandatory for every generated problem record. Record Pass/Fail plus rationale for Evidence Integrity, Research Quality, Analysis Quality, Evaluation Consistency, and Report Usability.
+
+M8 provides the [pilot runbook](docs/M8_PILOT_RUNBOOK.md), a copyable
+[review record](docs/templates/M8_PILOT_REVIEW_TEMPLATE.md), and a conditional
+[targeted fix/rerun log](docs/templates/M8_FIX_RERUN_LOG_TEMPLATE.md). A successful
+Flow, manifest, or offline test suite is not pilot acceptance: complete the human
+review record for every generated problem before treating the pilot as reviewed.
