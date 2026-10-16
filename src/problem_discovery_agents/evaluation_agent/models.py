@@ -10,6 +10,7 @@ from ..contracts import (
     QualitativeAssessment,
     ScoreAssessment,
     Stage1Scores,
+    Stage2Value,
     ValidationGap,
 )
 
@@ -41,9 +42,20 @@ class Stage1ProposalBatch(_StrictModel):
     proposals: list[Stage1Proposal]
 
 
+class Stage2Item(_StrictModel):
+    """One qualitative Stage 2 judgment. A list item, not a dict entry, because OpenAI
+    structured output rejects the `minProperties`/dict schema a mapping would produce."""
+
+    dimension: str
+    value: Stage2Value
+    rationale: str
+
+    _text = field_validator("dimension", "rationale")(_nonblank)
+
+
 class Stage2Proposal(_StrictModel):
     problem_id: str
-    assessments: dict[str, QualitativeAssessment] = Field(min_length=1)
+    assessments: list[Stage2Item]
 
     _problem_id = field_validator("problem_id")(_nonblank)
 

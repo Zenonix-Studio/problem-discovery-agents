@@ -90,7 +90,7 @@ class Planner:
             proposals = [
                 Stage2Proposal(
                     problem_id=record.problem_id,
-                    assessments={"feasibility": {"value": "Unknown", "rationale": "No further fit evidence supplied."}},
+                    assessments=[{"dimension": "feasibility", "value": "Unknown", "rationale": "No further fit evidence supplied."}],
                 )
                 for record in evaluation.evaluations
                 if record.stage1_status.value in {"Strong", "Promising"} and record.user_benefit
@@ -155,12 +155,12 @@ def test_every_analyzed_problem_must_have_exactly_one_evaluation(proposals, expe
 def test_stage2_is_only_attached_for_eligible_records() -> None:
     research, analysis, registry = _chain()
     stage1 = Stage1Proposal(problem_id="P-001", stage1_scores=_scores((3, 3, 2, 2)), user_benefit="Fewer repeated debugging steps.")
-    planner = Planner([stage1], stage2=[Stage2Proposal(problem_id="P-001", assessments={"feasibility": {"value": "Partial", "rationale": "Needs a small maintenance validation."}})])
+    planner = Planner([stage1], stage2=[Stage2Proposal(problem_id="P-001", assessments=[{"dimension": "feasibility", "value": "Partial", "rationale": "Needs a small maintenance validation."}])])
     result = EvaluationAgent(planner=planner).run(research, analysis, registry)
     assert result.evaluation_output.evaluations[0].stage2_assessment is not None
     assert planner.stage2_input_problem_ids == ["P-001"]
 
-    low = Planner([Stage1Proposal(problem_id="P-001", stage1_scores=_scores((1, 1, 1, 1)), user_benefit="Some benefit.")], stage2=[Stage2Proposal(problem_id="P-001", assessments={"fit": {"value": "Strong", "rationale": "Should not be requested."}})])
+    low = Planner([Stage1Proposal(problem_id="P-001", stage1_scores=_scores((1, 1, 1, 1)), user_benefit="Some benefit.")], stage2=[Stage2Proposal(problem_id="P-001", assessments=[{"dimension": "fit", "value": "Strong", "rationale": "Should not be requested."}])])
     EvaluationAgent(planner=low).run(research, analysis, registry)
     assert low.stage2_calls == 0
 
@@ -330,3 +330,50 @@ def test_report_using_only_field_names_is_still_rejected() -> None:
     ])
     with pytest.raises(ValueError, match="missing required report content: Problem Reality"):
         validate_report_markdown(report, result.evaluation_output, registry)
+
+
+# --- Stage 2 proposal list shape: regression for run-20261016T172923Z-2eed52c6 ----------
+
+
+def _stage2_item(dimension: str, value: str = "Partial") -> dict:
+    return {"dimension": dimension, "value": value, "rationale": f"Rationale for {dimension}."}
+
+
+def _eligible_run(items: list[dict]):
+    from problem_discovery_agents.evaluation_agent import Stage2Proposal
+
+    research, analysis, registry = _chain()
+    stage1 = Stage1Proposal(problem_id="P-001", stage1_scores=_scores((3, 3, 2, 2)), user_benefit="Fewer repeated debugging steps.")
+    planner = Planner([stage1], stage2=[Stage2Proposal(problem_id="P-001", assessments=items)])
+    return EvaluationAgent(planner=planner).run(research, analysis, registry)
+
+
+def test_stage2_items_become_the_existing_assessment_mapping() -> None:
+    result = _eligible_run([_stage2_item("capability", "Strong"), _stage2_item("maintainability")])
+    assessments = result.evaluation_output.evaluations[0].stage2_assessment.assessments
+    assert list(assessments) == ["capability", "maintainability"]
+    assert assessments["capability"].value.value == "Strong"
+    assert assessments["maintainability"].rationale == "Rationale for maintainability."
+
+
+@pytest.mark.parametrize(
+    ("items", "message"),
+    [
+        ([], "no assessments"),
+        ([_stage2_item("capability"), _stage2_item("Capability")], "duplicate"),
+    ],
+)
+def test_stage2_proposal_shape_errors_fail_fast(items: list[dict], message: str) -> None:
+    with pytest.raises(ContractValidationError, match=message):
+        _eligible_run(items)
+
+
+def test_stage2_item_rejects_blank_dimension() -> None:
+    from problem_discovery_agents.evaluation_agent import Stage2Proposal
+
+    with pytest.raises(ValidationError, match="must not be blank"):
+        Stage2Proposal(problem_id="P-001", assessments=[_stage2_item("  ")])
+
+
+def test_stage2_instructions_describe_the_item_shape() -> None:
+    assert "dimension, value and rationale" in STAGE2_INSTRUCTIONS

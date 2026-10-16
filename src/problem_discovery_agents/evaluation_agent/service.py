@@ -6,7 +6,7 @@ from typing import Protocol
 
 from ..contracts import (
     AnalysisOutput, EvaluationOutput, EvaluationRecord, EvidenceRegistry, ResearchOutput,
-    Stage1Status, Stage2Assessment,
+    QualitativeAssessment, Stage1Status, Stage2Assessment,
 )
 from ..validation import ContractValidationError, stage1_result, validate_analysis_output, validate_handoffs
 from .models import (
@@ -112,8 +112,23 @@ class EvaluationAgent:
                 details.append("Stage 2 proposals reference ineligible Problem IDs: " + ", ".join(unknown))
             raise ContractValidationError(details)
         by_id = {proposal.problem_id: proposal for proposal in batch.proposals}
+        shape_errors: list[str] = []
+        for problem_id, proposal in by_id.items():
+            names = [item.dimension.casefold() for item in proposal.assessments]
+            if not names:
+                shape_errors.append(f"Stage 2 proposal for {problem_id} has no assessments")
+            repeated = sorted({name for name in names if names.count(name) > 1})
+            if repeated:
+                shape_errors.append(
+                    f"Stage 2 proposal for {problem_id} has duplicate dimensions: " + ", ".join(repeated)
+                )
+        if shape_errors:
+            raise ContractValidationError(shape_errors)
         for record in evaluation.evaluations:
             if record.problem_id in by_id:
                 record.stage2_assessment = Stage2Assessment(
-                    assessments=by_id[record.problem_id].assessments
+                    assessments={
+                        item.dimension: QualitativeAssessment(value=item.value, rationale=item.rationale)
+                        for item in by_id[record.problem_id].assessments
+                    }
                 )

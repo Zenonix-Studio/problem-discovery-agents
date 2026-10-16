@@ -25,6 +25,8 @@ Use supplied non-secret team context and evidence. Return qualitative Strong, Pa
 or Unknown assessments with rationales about capability, maintainability, constraints, and
 demonstrability. Do not change Stage 1, introduce a fifth Stage 1 dimension, propose a
 product, predict adoption or stars, or claim certainty where team context is absent.
+Return each problem's assessments as a list of items with a dimension, value and rationale
+(dimension is a short name such as capability or maintainability; use each name once).
 """.strip()
 
 REPORT_INSTRUCTIONS = """
