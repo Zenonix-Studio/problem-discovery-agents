@@ -12,8 +12,17 @@ REQUIRED_HEADINGS = (
     "## Source appendix", "## Validation questions",
 )
 
+# Display labels for the Stage 1 fields. The report context uses these as keys so the model
+# mirrors them, and the validator derives its required labels from the same mapping.
+STAGE1_LABELS = {
+    "problem_reality": "Problem Reality",
+    "frequency_recurrence": "Frequency / Recurrence",
+    "alternative_gap": "Alternative Gap",
+    "meaningful_benefit": "Meaningful Benefit",
+}
+
 REQUIRED_REPORT_CONTENT = (
-    "Problem Reality", "Frequency / Recurrence", "Alternative Gap", "Meaningful Benefit",
+    *STAGE1_LABELS.values(),
     "Alternatives", "Counterevidence", "Potential measurable outcome", "Stage 2",
     "Next validation",
 )
@@ -23,10 +32,15 @@ def build_report_context(
     research: ResearchOutput, analysis: AnalysisOutput, evaluation: EvaluationOutput,
     registry: EvidenceRegistry,
 ) -> dict[str, object]:
+    evaluations = evaluation.model_dump(mode="json")
+    for record in evaluations["evaluations"]:
+        record["stage1_scores"] = {
+            STAGE1_LABELS[name]: assessment for name, assessment in record["stage1_scores"].items()
+        }
     return {
         "research_coverage": research.research_coverage.model_dump(mode="json"),
         "problems": [problem.model_dump(mode="json") for problem in analysis.problems],
-        "evaluations": evaluation.model_dump(mode="json"),
+        "evaluations": evaluations,
         "evidence_registry": registry.model_dump(mode="json"),
     }
 

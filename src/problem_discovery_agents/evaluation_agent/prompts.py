@@ -46,7 +46,8 @@ In the comparison, show deterministic Stage 1 status and a total only when it ex
 keep Research needed records visibly unranked. Each shortlisted problem card must name
 the Problem ID and statement, user/workflow/consequence, direct Evidence IDs and URLs,
 alternatives/workarounds, a potential measurable outcome, all four named Stage 1
-assessments with rationale, counterevidence/uncertainty, conditional Stage 2 assessment,
+assessments with rationale (label them exactly Problem Reality, Frequency / Recurrence,
+Alternative Gap and Meaningful Benefit; never use field names such as problem_reality), counterevidence/uncertainty, conditional Stage 2 assessment,
 and a next validation step. The rejected/inconclusive section must retain outdated,
 contradicted, needs-validation, Low priority, and partial-score observations with reasons.
 The source appendix must state each source's Evidence ID, URL, type, dates when known,

@@ -248,3 +248,85 @@ def test_crewai_boundary_uses_one_agent_and_structured_formats() -> None:
     )
     assert created["allow_delegation"] is False
     assert received["llm"]["model"] == "openai/gpt-5.4-mini"
+
+
+# --- Report Stage 1 labels: regression for run-20261016T163719Z-e8b53313 ---------------
+# The real model mirrored the snake_case keys it was shown (problem_reality: ...), so the
+# validator never found "Problem Reality". These tests exercise the context the model sees.
+
+STAGE1_DISPLAY_LABELS = ("Problem Reality", "Frequency / Recurrence", "Alternative Gap", "Meaningful Benefit")
+STAGE1_FIELD_NAMES = ("problem_reality", "frequency_recurrence", "alternative_gap", "meaningful_benefit")
+
+
+def _evaluated():
+    research, analysis, registry = _chain()
+    proposal = Stage1Proposal(problem_id="P-001", stage1_scores=_scores((2, 2, 2, 1)))
+    result = EvaluationAgent(planner=Planner([proposal])).run(research, analysis, registry)
+    return research, analysis, registry, result
+
+
+def test_report_context_presents_stage1_scores_with_display_labels() -> None:
+    from problem_discovery_agents.evaluation_agent.report import build_report_context
+
+    research, analysis, registry, result = _evaluated()
+    context = build_report_context(research, analysis, result.evaluation_output, registry)
+    scores = context["evaluations"]["evaluations"][0]["stage1_scores"]
+    assert tuple(scores) == STAGE1_DISPLAY_LABELS
+    assert not set(STAGE1_FIELD_NAMES) & set(scores)
+    assert scores["Problem Reality"]["score"] == 2 and scores["Meaningful Benefit"]["score"] == 1
+
+
+def test_building_report_context_does_not_change_the_evaluation_contract() -> None:
+    from problem_discovery_agents.evaluation_agent.report import build_report_context
+
+    research, analysis, registry, result = _evaluated()
+    build_report_context(research, analysis, result.evaluation_output, registry)
+    dumped = result.evaluation_output.model_dump(mode="json")["evaluations"][0]["stage1_scores"]
+    assert tuple(dumped) == STAGE1_FIELD_NAMES
+
+
+def test_report_instructions_name_the_four_stage1_labels() -> None:
+    for label in STAGE1_DISPLAY_LABELS:
+        assert label in REPORT_INSTRUCTIONS
+
+
+def test_report_written_from_the_received_context_passes_validation() -> None:
+    research, analysis, registry = _chain()
+    proposal = Stage1Proposal(problem_id="P-001", stage1_scores=_scores((2, 2, 2, 1)))
+
+    class ContextMirroringPlanner(Planner):
+        """Mirrors the keys of the context it receives, like the real model did."""
+
+        def write_report(self, report_context):
+            cards = [
+                f"{label}: {assessment['score']}"
+                for record in report_context["evaluations"]["evaluations"]
+                for label, assessment in record["stage1_scores"].items()
+            ]
+            evidence = report_context["evidence_registry"]["evidence"]
+            return "\n".join([
+                "## Executive summary", "## Examined landscape", "## Comparison",
+                "## Shortlisted problem cards", "P-001", *cards,
+                "Alternatives; Counterevidence; Potential measurable outcome; Stage 2; Next validation.",
+                "## Rejected and inconclusive observations", "## Source appendix",
+                *(f"{item['evidence_id']}: {item['source_url']}" for item in evidence),
+                "## Validation questions",
+            ])
+
+    result = EvaluationAgent(planner=ContextMirroringPlanner([proposal])).run(research, analysis, registry)
+    assert all(label in result.report_markdown for label in STAGE1_DISPLAY_LABELS)
+
+
+def test_report_using_only_field_names_is_still_rejected() -> None:
+    from problem_discovery_agents.evaluation_agent.report import validate_report_markdown
+
+    _, _, registry, result = _evaluated()
+    report = "\n".join([
+        "## Executive summary", "## Examined landscape", "## Comparison",
+        "## Shortlisted problem cards", "P-001", *(f"{name}: Partial" for name in STAGE1_FIELD_NAMES),
+        "Alternatives; Counterevidence; Potential measurable outcome; Stage 2; Next validation.",
+        "## Rejected and inconclusive observations", "## Source appendix", "EV-001: https://example.test/source-1",
+        "## Validation questions",
+    ])
+    with pytest.raises(ValueError, match="missing required report content: Problem Reality"):
+        validate_report_markdown(report, result.evaluation_output, registry)
