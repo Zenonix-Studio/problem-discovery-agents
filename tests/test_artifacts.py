@@ -29,3 +29,14 @@ def test_failure_manifest_does_not_persist_arbitrary_error_text(tmp_path: Path) 
     manifest = json.loads((writer.run_dir / "run_manifest.json").read_text())
     assert manifest["error"] == "RuntimeError: operation failed; inspect the failed stage and safe diagnostics."
     assert "sentinel-secret-value" not in (writer.run_dir / "run_manifest.json").read_text()
+
+
+def test_writer_merges_stage_diagnostics(tmp_path: Path) -> None:
+    writer = ArtifactWriter(tmp_path, request={"category": "Developer Tools & Productivity", "workflow_focus": None})
+    writer.write_research(_research(), {"research": {"rejected_candidate_urls": ["https://example.test/off-lead"]}})
+    writer.fail("analysis", ValueError("ignored"), {"usage": {"known": False}})
+    manifest = json.loads((writer.run_dir / "run_manifest.json").read_text())
+    assert manifest["diagnostics"] == {
+        "research": {"rejected_candidate_urls": ["https://example.test/off-lead"]},
+        "usage": {"known": False},
+    }

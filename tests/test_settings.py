@@ -1,5 +1,7 @@
 from __future__ import annotations
 
+from pathlib import Path
+
 import pytest
 
 from problem_discovery_agents.observability import RunUsage
@@ -42,8 +44,9 @@ def test_environment_overrides_model_settings(monkeypatch: pytest.MonkeyPatch) -
 
 
 def test_missing_and_blank_secrets_are_aggregated_and_redacted(
-    monkeypatch: pytest.MonkeyPatch,
+    monkeypatch: pytest.MonkeyPatch, tmp_path: Path,
 ) -> None:
+    monkeypatch.chdir(tmp_path)  # a developer's real .env must not leak into this test
     for name in REQUIRED_ENV:
         monkeypatch.delenv(name, raising=False)
     monkeypatch.setenv("PDA_LLM_API_KEY", "   ")

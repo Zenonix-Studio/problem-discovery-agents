@@ -93,7 +93,7 @@ class ProblemDiscoveryFlow(Flow[FlowState]):
             self._writer.write_research(self._research_result.research_output, self._diagnostics(research=self._research_result.diagnostics.model_dump(mode="json")))
             return self._research_result.research_output
         except Exception as error:
-            self._writer.fail("research", error, {})
+            self._writer.fail("research", error, self._diagnostics())
             raise
 
     @listen(research)
@@ -106,7 +106,7 @@ class ProblemDiscoveryFlow(Flow[FlowState]):
             self._writer.write_analysis(self._analysis_result.analysis_output, self._diagnostics(analysis=self._analysis_result.diagnostics.model_dump(mode="json")))
             return self._analysis_result.analysis_output
         except Exception as error:
-            self._writer.fail("analysis", error, {})
+            self._writer.fail("analysis", error, self._diagnostics())
             raise
 
     @listen(analysis)

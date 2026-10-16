@@ -1,6 +1,6 @@
 ---
 name: milestone-planner
-description: Plan one specified M1–M8 milestone in the problem-discovery-agents repository from its milestone brief and governing decision documents. Use when asked to prepare, revise, or review a milestone implementation plan; never implement code.
+description: Plan one specified M1–M9 milestone in the problem-discovery-agents repository from its milestone brief and governing decision documents. Use when asked to prepare, revise, or review a milestone implementation plan; never implement code.
 ---
 
 # Milestone Planner
@@ -11,7 +11,7 @@ Create an **implementation plan for exactly one milestone**, then stop for human
 
 The user specifies a milestone identifier in their request, e.g. `$milestone-planner M1` or `$milestone-planner M4`. Treat `MILESTONE_ID` as a **value read from the user request**, not an automatically substituted template variable.
 
-- Accepted identifiers: `M1` through `M8`, case-insensitive; normalize to uppercase.
+- Accepted identifiers: `M1` through `M9`, case-insensitive; normalize to uppercase.
 - If no milestone or more than one milestone is specified, ask for **one** identifier before proceeding.
 - Resolve the brief by finding exactly one file matching `docs/milestones/${MILESTONE_ID}_*.md`. Do not assume a filename beyond this convention. If zero or multiple files match, explain the issue and stop.
 - Plan output: `docs/plans/${MILESTONE_ID}_IMPLEMENTATION_PLAN.md`. Create `docs/plans/` if necessary.
@@ -29,7 +29,7 @@ The user specifies a milestone identifier in their request, e.g. `$milestone-pla
 
 - Plan **only** the selected milestone, keeping interfaces compatible with approved architecture and earlier implemented milestones.
 - Keep to a minimal, manually invoked **three-agent CrewAI Flow research pilot**; no extra agents, database, dashboard, generic harness, automated feedback loop, or product ideation.
-- Do not confuse the historic Step 1–4 **decision records** with the M1–M8 **implementation milestones**.
+- Do not confuse the historic Step 1–4 **decision records** with the M1–M9 **implementation milestones**.
 - Respect the milestone brief's `In scope`, `Out of scope` and acceptance checks. Cite file paths and relevant section headings in the plan when interpreting an important requirement.
 - Distinguish **approved decisions**, **delegated implementation choices** (offer a simple recommendation and why), and **unresolved blockers** (request a human decision). Do not treat a reasonable coding choice as a blocker, and do not silently decide true policy conflicts.
 - Do not assume unverified external API capabilities, model availability, dependency compatibility, credentials, or live integration success. Identify verification steps instead.

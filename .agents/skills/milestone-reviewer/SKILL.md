@@ -1,13 +1,13 @@
 ---
 name: milestone-reviewer
-description: Review a specified milestone's implementation plan or completed implementation against its brief, approved project decisions, scope, and verifiable acceptance criteria. Use for M1–M8 before approval or milestone sign-off.
+description: Review a specified milestone's implementation plan or completed implementation against its brief, approved project decisions, scope, and verifiable acceptance criteria. Use for M1–M9 before approval or milestone sign-off.
 ---
 
 # Milestone Reviewer
 
 ## Invocation
 
-Use `$milestone-reviewer M1 plan` to review a proposed implementation plan, or `$milestone-reviewer M1 implementation` to review completed code. Replace `M1` with any of `M1`–`M8`. If the review mode is omitted, ask whether to review the **plan** or **implementation**; never assume approval.
+Use `$milestone-reviewer M1 plan` to review a proposed implementation plan, or `$milestone-reviewer M1 implementation` to review completed code. Replace `M1` with any of `M1`–`M9`. If the review mode is omitted, ask whether to review the **plan** or **implementation**; never assume approval.
 
 ## Context and authority
 

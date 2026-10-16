@@ -12,7 +12,7 @@ from ..contracts import (
     ResearchOutput,
     VerificationStatus,
 )
-from ..research_tools.models import RetrievalState, SearchResult, SourceRecord
+from ..research_tools.models import RetrievalState, SearchLead, SearchResult, SourceRecord
 from ..validation import validate_research_output
 from .models import (
     CandidateSignal,
@@ -34,6 +34,16 @@ class ResearchPlanner(Protocol):
         self, request: ResearchRequest, pass_one_candidates: list[InspectedSignal]
     ) -> PassPlan: ...
 
+    def select_candidates(
+        self,
+        request: ResearchRequest,
+        plan: PassPlan,
+        leads: list[SearchLead],
+        *,
+        pass_name: str,
+        pass_one_candidates: list[InspectedSignal],
+    ) -> list[CandidateSignal]: ...
+
 
 class ResearchAgent:
     """Run exactly the approved broad-discovery then evidence-deepening passes."""
@@ -45,15 +55,21 @@ class ResearchAgent:
     def run(self, request: ResearchRequest) -> ResearchRunResult:
         pass_one = self._planner.plan_pass_one(request)
         diagnostics = ResearchDiagnostics()
-        lead_urls_one = self._discover(pass_one, diagnostics.pass_one_queries, diagnostics)
-        accepted_one = self._accepted(pass_one.candidates, lead_urls_one, diagnostics)
+        leads_one = self._discover(pass_one, diagnostics.pass_one_queries, diagnostics)
+        selected_one = self._select(request, pass_one, leads_one, "Pass 1", [])
+        accepted_one = self._accepted(selected_one, leads_one, diagnostics)
         records_one = self._inspect(accepted_one)
         researchable_one = self._researchable(accepted_one, records_one)
 
-        pass_two = self._planner.plan_pass_two(request, researchable_one)
-        lead_urls_two = self._discover(pass_two, diagnostics.pass_two_queries, diagnostics)
-        accepted_two = self._accepted(pass_two.candidates, lead_urls_two, diagnostics)
-        records_two = self._inspect(accepted_two)
+        pass_two = PassPlan()
+        accepted_two: list[CandidateSignal] = []
+        records_two: dict[str, SourceRecord] = {}
+        if researchable_one:
+            pass_two = self._planner.plan_pass_two(request, researchable_one)
+            leads_two = self._discover(pass_two, diagnostics.pass_two_queries, diagnostics)
+            selected_two = self._select(request, pass_two, leads_two, "Pass 2", researchable_one)
+            accepted_two = self._accepted(selected_two, leads_two, diagnostics)
+            records_two = self._inspect(accepted_two)
 
         all_candidates = [*accepted_one, *accepted_two]
         records = {**records_one, **records_two}
@@ -65,8 +81,8 @@ class ResearchAgent:
 
     def _discover(
         self, plan: PassPlan, query_log: list[str], diagnostics: ResearchDiagnostics
-    ) -> set[str]:
-        urls: set[str] = set()
+    ) -> list[SearchLead]:
+        leads_by_url: dict[str, SearchLead] = {}
         for item in plan.queries:
             query_log.append(f"{item.purpose}: {item.query}")
             result = self._tools.search(item.query)
@@ -77,13 +93,33 @@ class ResearchAgent:
                 continue
             if not result.leads:
                 diagnostics.unsuccessful_searches.append(f"{item.query}: no discovery leads returned")
-            urls.update(lead.original_url for lead in result.leads)
-        return urls
+            for lead in result.leads:
+                leads_by_url.setdefault(lead.original_url, lead)
+        return list(leads_by_url.values())
+
+    def _select(
+        self,
+        request: ResearchRequest,
+        plan: PassPlan,
+        leads: list[SearchLead],
+        pass_name: str,
+        pass_one_candidates: list[InspectedSignal],
+    ) -> list[CandidateSignal]:
+        if not leads:
+            return []
+        return self._planner.select_candidates(
+            request,
+            plan,
+            leads,
+            pass_name=pass_name,
+            pass_one_candidates=pass_one_candidates,
+        )
 
     @staticmethod
     def _accepted(
-        candidates: list[CandidateSignal], lead_urls: set[str], diagnostics: ResearchDiagnostics
-    ) -> list[InspectedSignal]:
+        candidates: list[CandidateSignal], leads: list[SearchLead], diagnostics: ResearchDiagnostics
+    ) -> list[CandidateSignal]:
+        lead_urls = {lead.original_url for lead in leads}
         accepted: list[CandidateSignal] = []
         for candidate in candidates:
             if candidate.source_url in lead_urls:

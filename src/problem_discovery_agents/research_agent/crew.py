@@ -6,9 +6,10 @@ from collections.abc import Callable
 from typing import Any
 
 from ..model_config import LLMFactory, build_shared_llm
+from ..research_tools.models import SearchLead
 from ..settings import Settings
-from .models import InspectedSignal, PassPlan, ResearchRequest
-from .prompts import PASS_ONE_INSTRUCTIONS, PASS_TWO_INSTRUCTIONS
+from .models import CandidateSelection, CandidateSignal, InspectedSignal, PassPlan, ResearchRequest
+from .prompts import PASS_ONE_INSTRUCTIONS, PASS_TWO_INSTRUCTIONS, SELECTION_INSTRUCTIONS
 
 
 AgentFactory = Callable[..., Any]
@@ -34,6 +35,48 @@ class CrewAIResearchPlanner:
             f"{PASS_TWO_INSTRUCTIONS}\nCategory: {request.category}\n"
             f"Inspected, researchable Pass 1 signals: {candidates}"
         )
+
+    def select_candidates(
+        self,
+        request: ResearchRequest,
+        plan: PassPlan,
+        leads: list[SearchLead],
+        *,
+        pass_name: str,
+        pass_one_candidates: list[InspectedSignal],
+    ) -> list[CandidateSignal]:
+        projection = [
+            {
+                "original_url": lead.original_url,
+                "title": lead.title,
+                "snippet": lead.snippet,
+                "published_at": lead.published_at.isoformat() if lead.published_at else None,
+            }
+            for lead in leads
+        ]
+        context = [
+            {
+                "source_url": signal.source_url,
+                "user_segment": signal.user_segment,
+                "workflow": signal.workflow,
+                "friction_hypothesis": signal.friction_hypothesis,
+                "source_type": signal.source_type,
+                "published_at": signal.published_at.isoformat() if signal.published_at else None,
+            }
+            for signal in pass_one_candidates
+        ]
+        result = self._agent.kickoff(
+            f"{SELECTION_INSTRUCTIONS}\nPass: {pass_name}\nCategory: {request.category}\n"
+            f"Workflows: {plan.workflows}\nQuery purposes: {[query.purpose for query in plan.queries]}\n"
+            f"Discovery leads: {projection}\nInspected Pass 1 context: {context}",
+            response_format=CandidateSelection,
+        )
+        value = getattr(result, "pydantic", result)
+        if isinstance(value, CandidateSelection):
+            return value.candidates
+        if isinstance(value, str):
+            return CandidateSelection.model_validate_json(value).candidates
+        return CandidateSelection.model_validate(value).candidates
 
     def _plan(self, instructions: str) -> PassPlan:
         result = self._agent.kickoff(instructions, response_format=PassPlan)

@@ -66,7 +66,7 @@ class ArtifactWriter:
         self._manifest.completed_stage = "evaluation"
         self._manifest.status = "succeeded"
         self._manifest.finished_at = datetime.now(UTC)
-        self._manifest.diagnostics = diagnostics
+        self._merge_diagnostics(diagnostics)
         self._write_manifest()
 
     def fail(self, stage: str, error: Exception, diagnostics: dict[str, object]) -> None:
@@ -74,13 +74,16 @@ class ArtifactWriter:
         self._manifest.failed_stage = stage
         self._manifest.error = safe_error_message(error)
         self._manifest.finished_at = datetime.now(UTC)
-        self._manifest.diagnostics = diagnostics
+        self._merge_diagnostics(diagnostics)
         self._write_manifest()
 
     def _advance(self, stage: str, diagnostics: dict[str, object]) -> None:
         self._manifest.completed_stage = stage
-        self._manifest.diagnostics = diagnostics
+        self._merge_diagnostics(diagnostics)
         self._write_manifest()
+
+    def _merge_diagnostics(self, diagnostics: dict[str, object]) -> None:
+        self._manifest.diagnostics = {**self._manifest.diagnostics, **diagnostics}
 
     def _write_manifest(self) -> None:
         self._write_json("run_manifest.json", self._manifest.model_dump(mode="json"))

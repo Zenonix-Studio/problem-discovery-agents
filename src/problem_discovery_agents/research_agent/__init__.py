@@ -2,6 +2,7 @@
 
 from .models import (
     CandidateSignal,
+    CandidateSelection,
     InspectedSignal,
     PassPlan,
     Query,
@@ -14,7 +15,7 @@ from .service import ResearchAgent, ResearchPlanner
 from .tools import M3ResearchTools, ResearchTools
 
 __all__ = [
-    "CandidateSignal", "CrewAIResearchPlanner", "InspectedSignal", "PassPlan", "Query", "ResearchAgent", "ResearchDiagnostics",
+    "CandidateSignal", "CandidateSelection", "CrewAIResearchPlanner", "InspectedSignal", "PassPlan", "Query", "ResearchAgent", "ResearchDiagnostics",
     "create_research_crew_agent",
     "M3ResearchTools", "ResearchPlanner", "ResearchRequest", "ResearchRunResult", "ResearchTools",
 ]

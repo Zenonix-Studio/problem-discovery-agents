@@ -17,7 +17,7 @@ from problem_discovery_agents.research_agent import (
     ResearchRequest,
     create_research_crew_agent,
 )
-from problem_discovery_agents.research_agent.prompts import PASS_ONE_INSTRUCTIONS, PASS_TWO_INSTRUCTIONS
+from problem_discovery_agents.research_agent.prompts import PASS_ONE_INSTRUCTIONS, PASS_TWO_INSTRUCTIONS, SELECTION_INSTRUCTIONS
 from problem_discovery_agents.research_tools.models import (
     RetrievalState,
     SearchLead,
@@ -35,10 +35,6 @@ class FakePlanner:
         return PassPlan(
             workflows=["CI troubleshooting", "dependency updates"],
             queries=[Query(query="site:github.com CI debugging manual logs", purpose="broad friction discovery")],
-            candidates=[
-                CandidateSignal(source_url="https://example.test/a", user_segment="backend developers", workflow="CI troubleshooting", friction_hypothesis="Developers struggle to locate the cause of CI failures in long logs.", observation="A developer describes manually tracing a failure through CI logs."),
-                CandidateSignal(source_url="https://example.test/inaccessible", user_segment="backend developers", workflow="CI troubleshooting", friction_hypothesis="Developers cannot inspect a referenced CI failure report.", observation="A search lead identifies a report but its original content could not be retrieved."),
-            ],
         )
 
     def plan_pass_two(self, request: ResearchRequest, pass_one_candidates: list[InspectedSignal]) -> PassPlan:
@@ -50,11 +46,18 @@ class FakePlanner:
         return PassPlan(
             workflows=["CI troubleshooting"],
             queries=[Query(query="CI debugging repeated manual logs firsthand", purpose="deepen independent evidence")],
-            candidates=[
-                CandidateSignal(source_url="https://example.test/b", user_segment="backend developers", workflow="CI troubleshooting", friction_hypothesis="Developers struggle to locate the cause of CI failures in long logs.", observation="A separate developer reports repeatedly reading long CI logs to identify the failure."),
-                CandidateSignal(source_url="https://example.test/c", user_segment="backend developers", workflow="CI troubleshooting", friction_hypothesis="Developers struggle to locate the cause of CI failures in long logs.", observation="A same-author cross-post describes the same CI log investigation."),
-            ],
         )
+
+    def select_candidates(self, request, plan, leads, *, pass_name, pass_one_candidates):
+        urls = (
+            ["https://example.test/a", "https://example.test/inaccessible"]
+            if pass_name == "Pass 1"
+            else ["https://example.test/b", "https://example.test/c"]
+        )
+        return [
+            CandidateSignal(source_url=url, user_segment="backend developers", workflow="CI troubleshooting", friction_hypothesis="Developers struggle to locate the cause of CI failures in long logs.")
+            for url in urls
+        ]
 
 
 class FakeTools:
@@ -99,7 +102,10 @@ def test_empty_search_is_valid_and_visible_as_a_gap() -> None:
             return PassPlan(workflows=["CI"], queries=[Query(query="empty", purpose="broad")])
 
         def plan_pass_two(self, request: ResearchRequest, pass_one_candidates: list[InspectedSignal]) -> PassPlan:
-            return PassPlan(queries=[Query(query="empty again", purpose="deepen")])
+            raise AssertionError("Pass 2 must not plan without inspected Pass 1 signals")
+
+        def select_candidates(self, *args, **kwargs):
+            raise AssertionError("empty discovery must not select")
 
     class EmptyTools:
         def search(self, query: str) -> SearchResult:
@@ -113,7 +119,7 @@ def test_empty_search_is_valid_and_visible_as_a_gap() -> None:
         ResearchRequest(category="Developer Tools & Productivity", workflow_focus="CI")
     ).research_output
     assert output.findings == []
-    assert len(output.research_coverage.unsuccessful_searches) == 2
+    assert len(output.research_coverage.unsuccessful_searches) == 1
     assert "Simulated failed search." in output.research_coverage.unsuccessful_searches[0]
     assert output.research_coverage.research_gaps
 
@@ -126,7 +132,7 @@ def test_scope_and_solution_language_are_rejected() -> None:
 
 
 def test_research_prompts_keep_required_scope_guards_visible() -> None:
-    combined = f"{PASS_ONE_INSTRUCTIONS}\n{PASS_TWO_INSTRUCTIONS}".lower()
+    combined = f"{PASS_ONE_INSTRUCTIONS}\n{PASS_TWO_INSTRUCTIONS}\n{SELECTION_INSTRUCTIONS}".lower()
     for required in ("search snippets are leads", "solution", "score", "validated", "invent", "resolved"):
         assert required in combined
 
@@ -182,7 +188,7 @@ def test_crew_factory_uses_the_shared_model_boundary() -> None:
     assert agent["llm"] == "fake-llm"  # type: ignore[index]
 
 
-def test_crewai_planner_requests_validated_plans_for_both_passes() -> None:
+def test_crewai_planner_requests_validated_plans_and_lead_grounded_selection() -> None:
     class Output:
         def __init__(self, plan: PassPlan) -> None:
             self.pydantic = plan
@@ -193,6 +199,9 @@ def test_crewai_planner_requests_validated_plans_for_both_passes() -> None:
 
         def kickoff(self, instructions: str, *, response_format: object) -> Output:
             self.calls.append((instructions, response_format))
+            if response_format.__name__ == "CandidateSelection":
+                from problem_discovery_agents.research_agent import CandidateSelection
+                return Output(CandidateSelection(candidates=[CandidateSignal(source_url="https://example.test/a", user_segment="developers", workflow="CI", friction_hypothesis="Developers struggle to inspect CI logs.")]))
             return Output(PassPlan(workflows=["CI"], queries=[Query(query="CI manual logs", purpose="test")]))
 
     agent = Agent()
@@ -202,10 +211,18 @@ def test_crewai_planner_requests_validated_plans_for_both_passes() -> None:
     assert planner.plan_pass_one(request).workflows == ["CI"]
     signal = InspectedSignal(source_url="https://example.test/a", user_segment="developers", workflow="CI", friction_hypothesis="Developers struggle to inspect CI logs.", source_excerpt="A retrieved source excerpt.", source_type="forum", author="dev")
     assert planner.plan_pass_two(request, [signal]).queries[0].query == "CI manual logs"
-    assert len(agent.calls) == 2
-    assert all(response_format is PassPlan for _, response_format in agent.calls)
+    leads = [SearchLead(original_url="https://example.test/a", title="Issue", snippet="Lead only", retrieved_at=NOW)]
+    selected = planner.select_candidates(request, PassPlan(workflows=["CI"]), leads, pass_name="Pass 1", pass_one_candidates=[])
+    assert [candidate.source_url for candidate in selected] == ["https://example.test/a"]
+    assert len(agent.calls) == 3
+    assert all(response_format is PassPlan for _, response_format in agent.calls[:2])
     assert "Inspected, researchable Pass 1 signals" in agent.calls[1][0]
     assert "A retrieved source excerpt." in agent.calls[1][0]
+    assert "candidate source URLs" not in agent.calls[0][0]
+    assert "https://example.test/a" in agent.calls[2][0]
+    assert "Lead only" in agent.calls[2][0]
+    planner.select_candidates(request, PassPlan(), leads, pass_name="Pass 2", pass_one_candidates=[signal])
+    assert "A retrieved source excerpt." not in agent.calls[3][0]
 
 
 def test_model_proposed_observation_never_overrides_retrieved_source_text() -> None:
@@ -214,12 +231,14 @@ def test_model_proposed_observation_never_overrides_retrieved_source_text() -> N
             return PassPlan(
                 workflows=["CI"],
                 queries=[Query(query="CI", purpose="broad")],
-                candidates=[CandidateSignal(source_url="https://example.test/source", user_segment="developers", workflow="CI", friction_hypothesis="Developers struggle to inspect CI logs.", observation="Unsupported search-snippet claim.", interpretation="Unsupported inferred cause.")],
             )
 
         def plan_pass_two(self, request: ResearchRequest, pass_one_candidates: list[InspectedSignal]) -> PassPlan:
             assert pass_one_candidates[0].source_excerpt == "Original content says logs were manually inspected."
             return PassPlan()
+
+        def select_candidates(self, request, plan, leads, *, pass_name, pass_one_candidates):
+            return [CandidateSignal(source_url="https://example.test/source", user_segment="developers", workflow="CI", friction_hypothesis="Developers struggle to inspect CI logs.", observation="Unsupported search-snippet claim.", interpretation="Unsupported inferred cause.")]
 
     class Tools:
         def search(self, query: str) -> SearchResult:
@@ -236,3 +255,59 @@ def test_model_proposed_observation_never_overrides_retrieved_source_text() -> N
     assert evidence.source_excerpt == evidence.observation
     assert "Unsupported search-snippet claim." not in evidence.observation
     assert evidence.interpretation is None
+
+
+def test_returned_lead_is_selected_then_inspected() -> None:
+    selected_url = "https://github.com/owner/repo/issues/7"
+
+    class Planner:
+        def plan_pass_one(self, request):
+            return PassPlan(workflows=["CI"], queries=[Query(query="CI failure", purpose="broad")])
+
+        def plan_pass_two(self, request, pass_one_candidates):
+            return PassPlan()
+
+        def select_candidates(self, request, plan, leads, **kwargs):
+            assert [lead.original_url for lead in leads] == [selected_url]
+            return [CandidateSignal(source_url=selected_url, user_segment="developers", workflow="CI", friction_hypothesis="Developers struggle to diagnose CI failures.")]
+
+    class Tools:
+        extracted: list[list[str]] = []
+
+        def search(self, query):
+            return SearchResult(query=query, leads=[SearchLead(original_url=selected_url, retrieved_at=NOW)], retrieved_at=NOW, retrieval_state=RetrievalState.COMPLETE)
+
+        def extract(self, urls):
+            self.extracted.append(urls)
+            return [SourceRecord(provider="github", request_kind="issue", requested_url=selected_url, source_type="issue", text="I repeatedly have trouble diagnosing CI failures.", author="dev", retrieved_at=NOW, retrieval_state=RetrievalState.COMPLETE)]
+
+    tools = Tools()
+    output = ResearchAgent(planner=Planner(), tools=tools).run(ResearchRequest(category="Developer Tools & Productivity")).research_output
+    assert len(output.findings) == 1
+    assert tools.extracted == [[selected_url]]
+
+
+def test_off_lead_selection_is_rejected_without_extraction() -> None:
+    lead_url = "https://github.com/owner/repo/issues/7"
+    rejected_url = "https://github.com/owner/repo/issues/8"
+
+    class Planner:
+        def plan_pass_one(self, request):
+            return PassPlan(queries=[Query(query="CI failure", purpose="broad")])
+
+        def plan_pass_two(self, request, pass_one_candidates):
+            raise AssertionError("no inspected source means no Pass 2")
+
+        def select_candidates(self, *args, **kwargs):
+            return [CandidateSignal(source_url=rejected_url, user_segment="developers", workflow="CI", friction_hypothesis="Developers struggle to diagnose CI failures.")]
+
+    class Tools:
+        def search(self, query):
+            return SearchResult(query=query, leads=[SearchLead(original_url=lead_url, retrieved_at=NOW)], retrieved_at=NOW, retrieval_state=RetrievalState.COMPLETE)
+
+        def extract(self, urls):
+            raise AssertionError("off-lead candidate must not be extracted")
+
+    result = ResearchAgent(planner=Planner(), tools=Tools()).run(ResearchRequest(category="Developer Tools & Productivity"))
+    assert result.research_output.findings == []
+    assert result.diagnostics.rejected_candidate_urls == [rejected_url]

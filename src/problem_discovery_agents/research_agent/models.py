@@ -85,12 +85,17 @@ class CandidateSignal(_StrictModel):
 class PassPlan(_StrictModel):
     workflows: list[str] = Field(default_factory=list)
     queries: list[Query] = Field(default_factory=list)
-    candidates: list[CandidateSignal] = Field(default_factory=list)
 
     @field_validator("workflows")
     @classmethod
     def _workflows_nonblank(cls, values: list[str]) -> list[str]:
         return [_nonblank(value) for value in values]
+
+
+class CandidateSelection(_StrictModel):
+    """Candidates selected only after the current pass has returned leads."""
+
+    candidates: list[CandidateSignal] = Field(default_factory=list)
 
 
 class InspectedSignal(_StrictModel):

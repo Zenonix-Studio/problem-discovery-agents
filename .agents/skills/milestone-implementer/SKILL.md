@@ -1,6 +1,6 @@
 ---
 name: milestone-implementer
-description: Implement and verify exactly one approved M1–M8 milestone in the problem-discovery-agents repository. Use only when the user explicitly authorizes implementation of a specific milestone and its reviewed plan; do not plan or implement other milestones.
+description: Implement and verify exactly one approved M1–M9 milestone in the problem-discovery-agents repository. Use only when the user explicitly authorizes implementation of a specific milestone and its reviewed plan; do not plan or implement other milestones.
 ---
 
 # Milestone Implementer
@@ -11,7 +11,7 @@ Implement **one explicitly approved milestone plan**, verify its acceptance crit
 
 The user invokes this skill with exactly one milestone identifier, for example `$milestone-implementer M1` or `$milestone-implementer M6`.
 
-- Accept `M1` through `M8` (case-insensitive); normalize to uppercase. Treat the identifier as a **value extracted from the user request**, not as a templating variable that Codex substitutes automatically.
+- Accept `M1` through `M9` (case-insensitive); normalize to uppercase. Treat the identifier as a **value extracted from the user request**, not as a templating variable that Codex substitutes automatically.
 - Require **explicit user authorization to implement the identified milestone's plan**. A direct request to implement that reviewed plan qualifies; if approval is unclear, ask before changing code.
 - Find **exactly one** matching brief: `docs/milestones/${MILESTONE_ID}_*.md`. If none or several match, report the ambiguity and stop.
 - Require `docs/plans/${MILESTONE_ID}_IMPLEMENTATION_PLAN.md` and inspect its contents. If missing, incomplete, still awaiting resolution of blocking decisions, or inconsistent with the user's stated approval, **stop and request clarification**; do not silently create a plan or treat an unreviewed draft as approved.

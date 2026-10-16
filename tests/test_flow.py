@@ -24,7 +24,7 @@ class Research:
     def __init__(self, calls: list[str]) -> None: self.calls = calls
     def run(self, request):
         self.calls.append("research")
-        return ResearchRunResult(research_output=_research(), diagnostics=ResearchDiagnostics())
+        return ResearchRunResult(research_output=_research(), diagnostics=ResearchDiagnostics(pass_one_queries=["broad: CI failure"], unsuccessful_searches=["CI failure: no discovery leads returned"], rejected_candidate_urls=["https://example.test/off-lead"]))
 
 
 class Analysis:
@@ -53,6 +53,8 @@ def test_flow_writes_validated_artifacts_once(tmp_path: Path) -> None:
     assert {path.name for path in flow.run_dir.iterdir()} == {"research_output.json", "analysis_output.json", "evaluation_output.json", "evidence_registry.json", "report.md", "run_manifest.json"}
     assert {item["evidence_id"] for item in json.loads((flow.run_dir / "evidence_registry.json").read_text())["evidence"]} == {"EV-001", "EV-002"}
     assert '"status": "succeeded"' in (flow.run_dir / "run_manifest.json").read_text()
+    manifest = json.loads((flow.run_dir / "run_manifest.json").read_text())
+    assert manifest["diagnostics"]["research"]["rejected_candidate_urls"] == ["https://example.test/off-lead"]
 
 
 def test_failure_stops_later_stages_and_keeps_prior_artifacts(tmp_path: Path) -> None:
@@ -68,6 +70,8 @@ def test_failure_stops_later_stages_and_keeps_prior_artifacts(tmp_path: Path) ->
     assert (flow.run_dir / "research_output.json").exists()
     assert not (flow.run_dir / "evaluation_output.json").exists()
     assert '"status": "failed"' in (flow.run_dir / "run_manifest.json").read_text()
+    manifest = json.loads((flow.run_dir / "run_manifest.json").read_text())
+    assert manifest["diagnostics"]["research"]["pass_one_queries"] == ["broad: CI failure"]
 
 
 def test_evaluation_registry_mismatch_fails_without_final_artifacts(tmp_path: Path) -> None:
@@ -90,3 +94,5 @@ def test_evaluation_registry_mismatch_fails_without_final_artifacts(tmp_path: Pa
     assert (flow.run_dir / "analysis_output.json").exists()
     assert not (flow.run_dir / "evaluation_output.json").exists()
     assert not (flow.run_dir / "evidence_registry.json").exists()
+    manifest = json.loads((flow.run_dir / "run_manifest.json").read_text())
+    assert manifest["diagnostics"]["research"]["rejected_candidate_urls"] == ["https://example.test/off-lead"]
