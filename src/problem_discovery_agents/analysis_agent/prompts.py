@@ -20,3 +20,18 @@ technical_verification: a reproducible technical check or confirmation of the be
 Do not propose a product or solution, score user value, claim validated demand, rate
 career fit, or create an automatic Research-Agent rerun.
 """.strip()
+
+
+PLAN_URL_RULE = (
+    "In this planning call do not propose any source URL: leave counterevidence_sources empty and "
+    "alternative source_urls empty. Sources are chosen later from real search leads."
+)
+
+SELECTION_INSTRUCTIONS = """
+You are the same Analysis Agent selecting sources to inspect from real search leads.
+Select only the supplied original_url values verbatim; never invent, normalize, or alter a URL.
+Prefer leads that could show built-ins, existing tools, workarounds, fixes, or contrary accounts
+for the proposed problems. Snippets are discovery leads, not evidence. About 8 selections is a
+provisional upper guide, not a quota; fewer or none are acceptable.
+Return urls only. Evidence classes (assigned later) are firsthand, documentation, or technical_verification.
+""".strip()

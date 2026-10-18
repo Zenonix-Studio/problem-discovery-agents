@@ -7,9 +7,10 @@ from pydantic import ValidationError
 
 from problem_discovery_agents.analysis_agent import (
     AnalysisAgent, AnalysisPlan, AlternativeProposal, CrewAIAnalysisPlanner,
-    ProblemProposal, RetrievalIntent, SourceRequest, create_analysis_crew_agent,
+    ProblemProposal, RetrievalIntent, SourceRequest, SourceSelection, create_analysis_crew_agent,
 )
-from problem_discovery_agents.analysis_agent.prompts import ANALYSIS_INSTRUCTIONS
+from problem_discovery_agents.analysis_agent.prompts import ANALYSIS_INSTRUCTIONS, SELECTION_INSTRUCTIONS
+from problem_discovery_agents.analysis_agent.service import CONTEXT_TEXT_CAP
 from problem_discovery_agents.contracts import (
     EvidenceItem, EvidenceRegistry, Finding, GapOutcome, Independence, ProblemStatus,
     ResearchCoverage, ResearchOutput, VerificationStatus,
@@ -47,20 +48,27 @@ class Planner:
             ],
         )
 
+    def select_sources(
+        self, research: ResearchOutput, investigation: AnalysisPlan, leads: list[dict[str, object]],
+    ) -> SourceSelection:
+        self.leads = leads
+        return SourceSelection(urls=["https://example.test/alternative", "https://example.test/contrary"])
+
     def finalize(
         self, research: ResearchOutput, investigation: AnalysisPlan,
-        inspected_sources: list[dict[str, object]],
+        inspected_sources: list[dict[str, object]], context_sources: list[dict[str, object]],
     ) -> AnalysisPlan:
         assert research.findings
         assert {source["requested_url"] for source in inspected_sources} <= {
             "https://example.test/alternative", "https://example.test/contrary"
         }
+        self.context = context_sources
         return investigation
 
 
 class Tools:
     def search(self, query: str) -> SearchResult:
-        return SearchResult(query=query, leads=[SearchLead(original_url="https://example.test/alternative", retrieved_at=NOW), SearchLead(original_url="https://example.test/contrary", retrieved_at=NOW)], retrieved_at=NOW, retrieval_state=RetrievalState.COMPLETE)
+        return SearchResult(query=query, leads=[SearchLead(original_url="https://example.test/alternative", title="Alt", snippet="alt snippet", retrieved_at=NOW), SearchLead(original_url="https://example.test/contrary", retrieved_at=NOW)], retrieved_at=NOW, retrieval_state=RetrievalState.COMPLETE)
 
     def extract(self, urls: list[str]) -> list[SourceRecord]:
         return [SourceRecord(provider="tavily", request_kind="extract", requested_url=url, canonical_url=url, source_type="documentation" if url.endswith("alternative") else "forum", text="Retrieved source confirms only the bounded claim for this context.", author="another-dev", created_at=NOW, retrieved_at=NOW, retrieval_state=RetrievalState.COMPLETE) for url in urls]
@@ -94,7 +102,8 @@ def test_failed_counterevidence_search_remains_an_explicit_gap() -> None:
             return SearchResult(query=query, retrieved_at=NOW, retrieval_state=RetrievalState.FAILED, limitations=["Simulated unavailable current-version search."])
 
         def extract(self, urls: list[str]) -> list[SourceRecord]:
-            raise AssertionError("failed discovery must not extract sources")
+            assert all(url in {f"https://example.test/{i}" for i in range(1, 4)} for url in urls), "failed discovery must not extract new sources"
+            return []
 
     result = AnalysisAgent(planner=Planner(), tools=FailedTools()).run(_research())
     first = result.analysis_output.problems[0]
@@ -141,7 +150,7 @@ def test_final_classification_uses_inspected_source_content(
     class FinalizingPlanner(Planner):
         def finalize(
             self, research: ResearchOutput, investigation: AnalysisPlan,
-            inspected_sources: list[dict[str, object]],
+            inspected_sources: list[dict[str, object]], context_sources: list[dict[str, object]],
         ) -> AnalysisPlan:
             assert all(source_text in str(source["text"]) for source in inspected_sources)
             final = investigation.model_copy(deep=True)
@@ -181,6 +190,8 @@ def test_crewai_planner_parses_structured_response() -> None:
             self.calls += 1
             assert response_format is AnalysisPlan
             assert "Research handoff" in instructions
+            if self.calls == 1:
+                assert "do not propose any source url" in instructions.lower()
             if self.calls == 2:
                 assert "Inspected source records" in instructions
             return Output()
@@ -189,4 +200,112 @@ def test_crewai_planner_parses_structured_response() -> None:
     research = _research()
     plan = planner.plan(research)
     assert plan == AnalysisPlan()
-    assert planner.finalize(research, plan, []) == AnalysisPlan()
+    assert planner.finalize(research, plan, [], []) == AnalysisPlan()
+
+
+def test_selection_sees_leads_and_only_lead_urls_become_evidence() -> None:
+    planner = Planner()
+    result = AnalysisAgent(planner=planner, tools=Tools()).run(_research())
+    urls = {lead["original_url"] for lead in planner.leads}
+    assert urls == {"https://example.test/alternative", "https://example.test/contrary"}
+    alt = next(lead for lead in planner.leads if lead["original_url"].endswith("alternative"))
+    assert alt["title"] == "Alt" and alt["snippet"] == "alt snippet" and alt["query"]
+    assert result.diagnostics.rejected_source_urls == []
+
+
+def test_selected_non_lead_url_is_not_extracted_and_is_recorded() -> None:
+    extracted: list[str] = []
+
+    class BadSelection(Planner):
+        def select_sources(self, research, investigation, leads):  # type: ignore[no-untyped-def]
+            return SourceSelection(urls=["https://example.test/invented", "https://example.test/contrary"])
+
+    class Spy(Tools):
+        def extract(self, urls: list[str]) -> list[SourceRecord]:
+            extracted.extend(urls)
+            return super().extract(urls)
+
+    result = AnalysisAgent(planner=BadSelection(), tools=Spy()).run(_research())
+    assert "https://example.test/invented" not in extracted
+    assert result.diagnostics.rejected_source_urls[0] == "https://example.test/invented"
+
+
+def test_finalize_url_that_was_not_inspected_is_recorded_not_dropped() -> None:
+    class Drifting(Planner):
+        def finalize(self, research, investigation, inspected_sources, context_sources):  # type: ignore[no-untyped-def]
+            final = investigation.model_copy(deep=True)
+            final.problems[0].alternatives[0].source_urls = ["https://example.test/never-inspected"]
+            return final
+
+    result = AnalysisAgent(planner=Drifting(), tools=Tools()).run(_research())
+    assert "https://example.test/never-inspected" in result.diagnostics.rejected_source_urls
+    assert any("never-inspected" in gap for gap in result.analysis_output.problems[0].research_gaps)
+
+
+def test_no_leads_skips_selection_and_extracts_only_context() -> None:
+    extracted: list[str] = []
+
+    class NoLeads(Tools):
+        def search(self, query: str) -> SearchResult:
+            return SearchResult(query=query, retrieved_at=NOW, retrieval_state=RetrievalState.COMPLETE)
+
+        def extract(self, urls: list[str]) -> list[SourceRecord]:
+            extracted.extend(urls)
+            return super().extract(urls)
+
+    class NoSelect(Planner):
+        def select_sources(self, research, investigation, leads):  # type: ignore[no-untyped-def]
+            raise AssertionError("selection must not run without leads")
+
+    AnalysisAgent(planner=NoSelect(), tools=NoLeads()).run(_research())
+    assert set(extracted) == {f"https://example.test/{i}" for i in range(1, 4)}
+
+
+def test_verified_research_evidence_is_context_not_new_evidence() -> None:
+    research = _research()
+    research.evidence_registry.evidence[2] = research.evidence_registry.evidence[2].model_copy(
+        update={"verification_status": VerificationStatus.PARTIAL}
+    )
+    extracted: list[str] = []
+
+    class Spy(Tools):
+        def extract(self, urls: list[str]) -> list[SourceRecord]:
+            extracted.extend(urls)
+            records = super().extract(urls)
+            return [r.model_copy(update={"text": "x" * (CONTEXT_TEXT_CAP + 500)}) for r in records]
+
+    planner = Planner()
+    result = AnalysisAgent(planner=planner, tools=Spy()).run(research)
+    assert "https://example.test/3" not in extracted
+    assert {c["evidence_id"] for c in planner.context} == {"EV-001", "EV-002"}
+    assert all(len(str(c["text"])) == CONTEXT_TEXT_CAP for c in planner.context)
+    assert [e.evidence_id for e in result.analysis_output.evidence_registry_delta.evidence] == ["EV-004", "EV-005"]
+
+
+def test_selected_url_already_in_research_registry_is_not_duplicated() -> None:
+    class Dup(Planner):
+        def select_sources(self, research, investigation, leads):  # type: ignore[no-untyped-def]
+            return SourceSelection(urls=["https://example.test/1"])
+
+    class Leads1(Tools):
+        def search(self, query: str) -> SearchResult:
+            return SearchResult(query=query, leads=[SearchLead(original_url="https://example.test/1", retrieved_at=NOW)], retrieved_at=NOW, retrieval_state=RetrievalState.COMPLETE)
+
+    result = AnalysisAgent(planner=Dup(), tools=Leads1()).run(_research())
+    assert result.analysis_output.evidence_registry_delta.evidence == []
+
+
+def test_selection_prompt_and_crew_call() -> None:
+    for required in ("verbatim", "firsthand", "documentation", "technical_verification"):
+        assert required in SELECTION_INSTRUCTIONS
+    class Output:
+        pydantic = SourceSelection(urls=["https://example.test/a"])
+    class Agent:
+        def kickoff(self, instructions: str, *, response_format: object) -> Output:
+            assert response_format is SourceSelection
+            assert "https://example.test/a" in instructions
+            return Output()
+    selection = CrewAIAnalysisPlanner(Agent()).select_sources(
+        _research(), AnalysisPlan(), [{"original_url": "https://example.test/a"}]
+    )
+    assert selection.urls == ["https://example.test/a"]

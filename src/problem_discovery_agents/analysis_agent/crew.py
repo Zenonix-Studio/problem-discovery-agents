@@ -8,8 +8,8 @@ from typing import Any
 from ..model_config import LLMFactory, build_shared_llm
 from ..settings import Settings
 from ..contracts import ResearchOutput
-from .models import AnalysisPlan
-from .prompts import ANALYSIS_INSTRUCTIONS
+from .models import AnalysisPlan, SourceSelection
+from .prompts import ANALYSIS_INSTRUCTIONS, PLAN_URL_RULE, SELECTION_INSTRUCTIONS
 
 AgentFactory = Callable[..., Any]
 
@@ -20,7 +20,7 @@ class CrewAIAnalysisPlanner:
 
     def plan(self, research: ResearchOutput) -> AnalysisPlan:
         result = self._agent.kickoff(
-            f"{ANALYSIS_INSTRUCTIONS}\nResearch handoff: {research.model_dump(mode='json')}",
+            f"{ANALYSIS_INSTRUCTIONS}\n{PLAN_URL_RULE}\nResearch handoff: {research.model_dump(mode='json')}",
             response_format=AnalysisPlan,
         )
         value = getattr(result, "pydantic", result)
@@ -30,16 +30,34 @@ class CrewAIAnalysisPlanner:
             return AnalysisPlan.model_validate_json(value)
         return AnalysisPlan.model_validate(value)
 
+    def select_sources(
+        self, research: ResearchOutput, investigation: AnalysisPlan, leads: list[dict[str, object]],
+    ) -> SourceSelection:
+        result = self._agent.kickoff(
+            f"{SELECTION_INSTRUCTIONS}\nInitial investigation: {investigation.model_dump(mode='json')}\n"
+            f"Search leads: {leads}",
+            response_format=SourceSelection,
+        )
+        value = getattr(result, "pydantic", result)
+        if isinstance(value, SourceSelection):
+            return value
+        if isinstance(value, str):
+            return SourceSelection.model_validate_json(value)
+        return SourceSelection.model_validate(value)
+
     def finalize(
         self, research: ResearchOutput, investigation: AnalysisPlan,
-        inspected_sources: list[dict[str, object]],
+        inspected_sources: list[dict[str, object]], context_sources: list[dict[str, object]],
     ) -> AnalysisPlan:
         result = self._agent.kickoff(
             f"{ANALYSIS_INSTRUCTIONS}\nResearch handoff: {research.model_dump(mode='json')}\n"
             f"Initial investigation: {investigation.model_dump(mode='json')}\n"
             f"Inspected source records: {inspected_sources}\n"
+            f"Fuller text of existing evidence (cite by evidence_id in evidence_ids): {context_sources}\n"
             "Now produce the final AnalysisPlan. Classify alternatives, resolution, and status "
-            "only from the supplied inspected records and linked prior evidence; retain gaps otherwise.",
+            "only from the supplied inspected records, existing-evidence text and linked prior evidence; "
+            "retain gaps otherwise. Put source_urls and counterevidence_sources only for inspected source "
+            "records, never for existing evidence.",
             response_format=AnalysisPlan,
         )
         value = getattr(result, "pydantic", result)

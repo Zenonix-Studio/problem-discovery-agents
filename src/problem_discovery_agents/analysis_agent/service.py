@@ -12,15 +12,22 @@ from ..contracts import (
 from ..research_agent.tools import ResearchTools
 from ..research_tools.models import RetrievalState, SourceRecord
 from ..validation import validate_analysis_output, validate_research_output
-from .models import AnalysisDiagnostics, AnalysisPlan, AnalysisRunResult, ProblemProposal
+from .models import AnalysisDiagnostics, AnalysisPlan, AnalysisRunResult, ProblemProposal, SourceSelection
+
+# Provisional per-source text cap for the model's view of a page.
+CONTEXT_TEXT_CAP = 4000
 
 
 class AnalysisPlanner(Protocol):
     def plan(self, research: ResearchOutput) -> AnalysisPlan: ...
 
+    def select_sources(
+        self, research: ResearchOutput, investigation: AnalysisPlan, leads: list[dict[str, object]],
+    ) -> SourceSelection: ...
+
     def finalize(
         self, research: ResearchOutput, investigation: AnalysisPlan,
-        inspected_sources: list[dict[str, object]],
+        inspected_sources: list[dict[str, object]], context_sources: list[dict[str, object]],
     ) -> AnalysisPlan: ...
 
 
@@ -35,22 +42,41 @@ class AnalysisAgent:
         validate_research_output(research)
         investigation = self._planner.plan(research)
         diagnostics = AnalysisDiagnostics()
-        lead_urls = self._discover(investigation, diagnostics)
-        requested = self._requested_urls(investigation)
-        accepted = [url for url in requested if url in lead_urls]
-        diagnostics.rejected_source_urls.extend(url for url in requested if url not in lead_urls)
-        records = self._inspect(accepted)
+        leads = self._discover(investigation, diagnostics)
+        selection = (
+            self._planner.select_sources(research, investigation, leads) if leads else SourceSelection()
+        )
+        context_urls = {
+            str(item.source_url): item.evidence_id for item in research.evidence_registry.evidence
+            if item.verification_status is VerificationStatus.VERIFIED
+        }
+        lead_urls = {lead["original_url"] for lead in leads}
+        selected = list(dict.fromkeys(selection.urls))
+        diagnostics.rejected_source_urls.extend(url for url in selected if url not in lead_urls)
+        new_urls = [url for url in selected if url in lead_urls and url not in context_urls]
+        records = self._inspect([*new_urls, *context_urls])
+        new_records = {url: records[url] for url in new_urls if url in records}
+        context = [
+            {"evidence_id": evidence_id, "requested_url": url, "text": records[url].text[:CONTEXT_TEXT_CAP]}
+            for url, evidence_id in context_urls.items() if url in records and records[url].text
+        ]
         plan = self._planner.finalize(
             research,
             investigation,
-            [record.model_dump(mode="json") for record in records.values()],
+            [_capped(record) for record in new_records.values()],
+            context,
         )
+        diagnostics.rejected_source_urls.extend(
+            url for proposal in plan.problems for url in self._proposal_urls(proposal)
+            if url not in new_records and url not in diagnostics.rejected_source_urls
+        )
+        records = new_records
         output = self._assemble(research, plan, records, diagnostics)
         registry = validate_analysis_output(research, output)
         return AnalysisRunResult(analysis_output=output, evidence_registry=registry, diagnostics=diagnostics)
 
-    def _discover(self, plan: AnalysisPlan, diagnostics: AnalysisDiagnostics) -> set[str]:
-        urls: set[str] = set()
+    def _discover(self, plan: AnalysisPlan, diagnostics: AnalysisDiagnostics) -> list[dict[str, object]]:
+        leads: dict[str, dict[str, object]] = {}
         intents = [
             *plan.retrieval_intents,
             *(intent for problem in plan.problems for intent in problem.counterevidence_intents),
@@ -69,17 +95,13 @@ class AnalysisAgent:
                 continue
             if not result.leads:
                 diagnostics.unsuccessful_searches.append(f"{intent.query}: no discovery leads returned")
-            urls.update(lead.original_url for lead in result.leads)
-        return urls
-
-    @staticmethod
-    def _requested_urls(plan: AnalysisPlan) -> list[str]:
-        urls: list[str] = []
-        for problem in plan.problems:
-            urls.extend(source.source_url for source in problem.counterevidence_sources)
-            for alternative in problem.alternatives:
-                urls.extend(alternative.source_urls)
-        return list(dict.fromkeys(urls))
+            for lead in result.leads:
+                leads.setdefault(lead.original_url, {
+                    "original_url": lead.original_url, "title": lead.title, "snippet": lead.snippet,
+                    "published_at": lead.published_at.isoformat() if lead.published_at else None,
+                    "query": intent.query, "purpose": intent.purpose,
+                })
+        return list(leads.values())
 
     def _inspect(self, urls: list[str]) -> dict[str, SourceRecord]:
         if not urls:
@@ -146,6 +168,13 @@ class AnalysisAgent:
             *(source.source_url for source in proposal.counterevidence_sources),
             *(url for alternative in proposal.alternatives for url in alternative.source_urls),
         ]
+
+
+def _capped(record: SourceRecord) -> dict[str, object]:
+    data = record.model_dump(mode="json")
+    if data.get("text"):
+        data["text"] = data["text"][:CONTEXT_TEXT_CAP]
+    return data
 
 
 def _next_evidence_number(registry: EvidenceRegistry) -> int:

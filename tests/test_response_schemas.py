@@ -9,11 +9,11 @@ from __future__ import annotations
 
 import pytest
 
-from problem_discovery_agents.analysis_agent.models import AnalysisPlan
+from problem_discovery_agents.analysis_agent.models import AnalysisPlan, SourceSelection
 from problem_discovery_agents.evaluation_agent import Stage1ProposalBatch, Stage2ProposalBatch
 from problem_discovery_agents.research_agent import CandidateSelection, PassPlan
 
-RESPONSE_FORMATS = (PassPlan, CandidateSelection, AnalysisPlan, Stage1ProposalBatch, Stage2ProposalBatch)
+RESPONSE_FORMATS = (PassPlan, CandidateSelection, AnalysisPlan, SourceSelection, Stage1ProposalBatch, Stage2ProposalBatch)
 REJECTED_KEYWORDS = ("minProperties", "maxProperties", "patternProperties", "propertyNames")
 
 

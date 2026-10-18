@@ -31,6 +31,10 @@ class SourceRequest(_StrictModel):
     _text = field_validator("source_url", "evidence_class")(_nonblank)
 
 
+class SourceSelection(_StrictModel):
+    urls: list[str] = Field(default_factory=list)
+
+
 class AlternativeProposal(_StrictModel):
     name: str
     kind: str
