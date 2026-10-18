@@ -13,7 +13,7 @@ Internal research pilot (not the eventual OSS product): a **minimal, manually in
 5. `docs/Problem_Discovery_Step3_Evaluation_Rubric_Decisions.md` — Stage 1 rubric (**four dimensions, /12**, not five/15)
 6. `docs/Problem_Discovery_Step4_Implementation_Contracts_Decisions.md` — contracts, validations, pilot acceptance
 
-Later explicit amendments win for their own topic. Milestone briefs live in `docs/milestones/` (M1–M8), plans in `docs/plans/`; project-local milestone skills are in `.agents/skills/`.
+Later explicit amendments win for their own topic. Milestone briefs live in `docs/milestones/` (M1–M9), plans in `docs/plans/`; project-local milestone skills are in `.agents/skills/`.
 
 ## Workflow (single execution path)
 
@@ -47,7 +47,7 @@ Run output goes to a unique dir under `artifacts/`: `research_output.json`, `ana
 - `flow.py`, `run.py`, `artifacts.py` — Flow orchestration, CLI, persistence
 - `settings.py`, `model_config.py`, `config_check.py`, `observability.py` — env config, model config, usage/cost recording
 
-Status: M1–M7 committed; M8 (end-to-end pilot acceptance review, `docs/M8_PILOT_RUNBOOK.md`, `docs/templates/`) in progress.
+Status: M1–M7, M9 (lead-grounded candidate selection in Research) and targeted M8 fixes are committed (`docs/plans/*_FIX_PLAN.md`: evidence-class vocabulary, Stage 1 report labels, Stage 2 schema, Analysis lead-grounded sources). M8 (end-to-end pilot acceptance review, `docs/M8_PILOT_RUNBOOK.md`, `docs/templates/`) is in human review of the first successful live run; known open items: zero-problem report validator failure, report wording/placement of Low priority problems, and `extract` returning issue bodies without comments.
 
 ## Configuration and tools
 
@@ -101,5 +101,5 @@ No proposed OSS product/pitch; no extra agents, debate, or Analysis→Research l
 1. Read the relevant source docs first; flag ambiguity before changing agreed semantics.
 2. Thin end-to-end path first, then contracts, failure-path tests, prompt/tool refinement.
 3. Don't silently change research policy, thresholds, agent count, or workflow sequence; document implementation-only choices and deviations.
-4. Don't overwrite unrelated uncommitted work (M8 docs/templates/tests are currently untracked). Commit only when asked.
+4. Don't overwrite unrelated uncommitted work. Commit only when asked; get approval before implementing a planned fix and before any paid live run.
 5. After the pilot, report coverage and limitations plainly; human validation is mandatory before extending scope.
