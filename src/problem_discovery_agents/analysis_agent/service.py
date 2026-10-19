@@ -6,7 +6,7 @@ import re
 from typing import Protocol
 
 from ..contracts import (
-    Alternative, AnalysisOutput, EvidenceItem, EvidenceRegistry, Independence,
+    Alternative, AnalysisOutput, EvidenceItem, EvidenceRegistry, GapOutcome, Independence,
     Problem, ResearchOutput, VerificationStatus,
 )
 from ..research_agent.tools import ResearchTools
@@ -138,18 +138,27 @@ class AnalysisAgent:
                 item_id for source in proposal.counterevidence_sources
                 if (item_id := evidence_id(source.source_url, source.evidence_class)) is not None
             ]
-            alternatives = [
-                Alternative(
+            alternatives: list[Alternative] = []
+            downgrades: list[str] = []
+            for item in proposal.alternatives:
+                ids = [
+                    item_id for url in item.source_urls
+                    if (item_id := evidence_id(url, "documentation")) is not None
+                ]
+                outcome = item.gap_outcome
+                if outcome is not GapOutcome.UNKNOWN_GAP and not ids:
+                    # A support claim without an inspected source is uncertainty, not a failed run.
+                    downgrades.append(
+                        f"Alternative '{item.name}' was proposed as {outcome.value} but no inspected "
+                        "source supports it; recorded as unknown_gap."
+                    )
+                    outcome = GapOutcome.UNKNOWN_GAP
+                alternatives.append(Alternative(
                     name=item.name, kind=item.kind, what_it_solves=item.what_it_solves,
-                    gap_outcome=item.gap_outcome,
-                    evidence_ids=[
-                        item_id for url in item.source_urls
-                        if (item_id := evidence_id(url, "documentation")) is not None
-                    ],
-                )
-                for item in proposal.alternatives
-            ]
-            gaps = list(proposal.research_gaps)
+                    gap_outcome=outcome, evidence_ids=ids,
+                ))
+            diagnostics.downgraded_alternatives.extend(f"P-{index:03d}: {note}" for note in downgrades)
+            gaps = [*proposal.research_gaps, *downgrades]
             gaps.extend(diagnostics.unsuccessful_searches)
             rejected = [url for url in self._proposal_urls(proposal) if url in diagnostics.rejected_source_urls]
             if rejected:

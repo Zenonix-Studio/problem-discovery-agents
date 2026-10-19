@@ -346,3 +346,45 @@ def test_finalize_prompt_asks_for_the_comment_url() -> None:
             return Output()
 
     CrewAIAnalysisPlanner(Agent()).finalize(_research(), AnalysisPlan(), [], [])
+
+
+def _claims(source_urls: list[str], outcome: GapOutcome = GapOutcome.NEED_SUBSTANTIALLY_MET) -> Planner:
+    class Claims(Planner):
+        def finalize(self, research, investigation, inspected_sources, context_sources):  # type: ignore[no-untyped-def]
+            plan = investigation.model_copy(deep=True)
+            alternative = plan.problems[0].alternatives[0].model_copy(
+                update={"gap_outcome": outcome, "source_urls": source_urls}
+            )
+            plan.problems[0].alternatives = [alternative]
+            return plan
+
+    return Claims()
+
+
+@pytest.mark.parametrize(
+    "source_urls",
+    [[], ["https://example.test/not-a-lead"], ["https://example.test/1"]],
+    ids=["no-url", "non-lead-url", "existing-research-evidence-url"],
+)
+def test_unsupported_alternative_claim_is_downgraded_not_fatal(source_urls: list[str]) -> None:
+    result = AnalysisAgent(planner=_claims(source_urls), tools=Tools()).run(_research())
+    problem = result.analysis_output.problems[0]
+    alternative = problem.alternatives[0]
+    assert alternative.gap_outcome is GapOutcome.UNKNOWN_GAP
+    assert alternative.evidence_ids == []
+    assert any("CI log viewer" in gap and "need_substantially_met" in gap for gap in problem.research_gaps)
+    assert len(result.diagnostics.downgraded_alternatives) == 1
+
+
+def test_supported_alternative_claim_with_an_inspected_source_is_kept() -> None:
+    result = AnalysisAgent(planner=_claims(["https://example.test/alternative"]), tools=Tools()).run(_research())
+    alternative = result.analysis_output.problems[0].alternatives[0]
+    assert alternative.gap_outcome is GapOutcome.NEED_SUBSTANTIALLY_MET
+    assert alternative.evidence_ids
+    assert result.diagnostics.downgraded_alternatives == []
+
+
+def test_unknown_gap_alternative_adds_no_downgrade_note() -> None:
+    result = AnalysisAgent(planner=_claims([], GapOutcome.UNKNOWN_GAP), tools=Tools()).run(_research())
+    assert result.diagnostics.downgraded_alternatives == []
+    assert not any("recorded as unknown_gap" in gap for gap in result.analysis_output.problems[0].research_gaps)
