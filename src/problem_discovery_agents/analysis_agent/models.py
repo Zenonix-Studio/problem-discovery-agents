@@ -77,6 +77,7 @@ class AnalysisDiagnostics(_StrictModel):
     unsuccessful_searches: list[str] = Field(default_factory=list)
     rejected_source_urls: list[str] = Field(default_factory=list)
     downgraded_alternatives: list[str] = Field(default_factory=list)
+    downgraded_statuses: list[str] = Field(default_factory=list)
 
 
 class AnalysisRunResult(_StrictModel):

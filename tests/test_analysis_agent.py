@@ -17,7 +17,7 @@ from problem_discovery_agents.contracts import (
 )
 from problem_discovery_agents.research_tools.models import RetrievalState, SearchLead, SearchResult, SourceRecord
 from problem_discovery_agents.settings import Settings
-from problem_discovery_agents.validation import ContractValidationError, validate_analysis_output
+from problem_discovery_agents.validation import ContractValidationError, independent_firsthand_ids, validate_analysis_output
 
 NOW = datetime(2026, 10, 15, tzinfo=UTC)
 
@@ -388,3 +388,50 @@ def test_unknown_gap_alternative_adds_no_downgrade_note() -> None:
     result = AnalysisAgent(planner=_claims([], GapOutcome.UNKNOWN_GAP), tools=Tools()).run(_research())
     assert result.diagnostics.downgraded_alternatives == []
     assert not any("recorded as unknown_gap" in gap for gap in result.analysis_output.problems[0].research_gaps)
+
+
+def _status(index: int, status: ProblemStatus, **update: object) -> Planner:
+    class Claims(Planner):
+        def finalize(self, research, investigation, inspected_sources, context_sources):  # type: ignore[no-untyped-def]
+            plan = investigation.model_copy(deep=True)
+            plan.problems[index] = plan.problems[index].model_copy(update={"status": status, **update})
+            return plan
+
+    return Claims()
+
+
+def test_corroborated_without_two_independent_firsthand_items_is_downgraded() -> None:
+    planner = _status(0, ProblemStatus.CORROBORATED, evidence_ids=["EV-001", "EV-003"])
+    result = AnalysisAgent(planner=planner, tools=Tools()).run(_research())
+    problem = result.analysis_output.problems[0]
+    assert problem.status is ProblemStatus.NEEDS_VALIDATION
+    assert any("corroborated" in gap and "needs_validation" in gap for gap in problem.research_gaps)
+    assert len(result.diagnostics.downgraded_statuses) == 1
+
+
+def test_supported_statuses_are_kept_without_notes() -> None:
+    result = AnalysisAgent(planner=Planner(), tools=Tools()).run(_research())
+    assert [p.status for p in result.analysis_output.problems] == [ProblemStatus.CORROBORATED, ProblemStatus.NEEDS_VALIDATION]
+    assert result.diagnostics.downgraded_statuses == []
+
+
+@pytest.mark.parametrize("status", [ProblemStatus.OUTDATED, ProblemStatus.CONTRADICTED])
+def test_outdated_or_contradicted_without_counterevidence_is_downgraded(status: ProblemStatus) -> None:
+    planner = _status(1, status, counterevidence_sources=[SourceRequest(source_url="https://example.test/not-a-lead", evidence_class="firsthand")])
+    result = AnalysisAgent(planner=planner, tools=Tools()).run(_research())
+    problem = result.analysis_output.problems[1]
+    assert problem.status is ProblemStatus.NEEDS_VALIDATION
+    assert any(status.value in gap and "needs_validation" in gap for gap in problem.research_gaps)
+    assert len(result.diagnostics.downgraded_statuses) == 1
+
+
+@pytest.mark.parametrize("status", [ProblemStatus.OUTDATED, ProblemStatus.CONTRADICTED])
+def test_outdated_or_contradicted_with_a_resolved_counterevidence_source_is_kept(status: ProblemStatus) -> None:
+    result = AnalysisAgent(planner=_status(0, status), tools=Tools()).run(_research())
+    assert result.analysis_output.problems[0].status is status
+    assert result.diagnostics.downgraded_statuses == []
+
+
+def test_shared_helper_counts_only_independent_firsthand_items() -> None:
+    by_id = _research().evidence_registry.by_id()
+    assert independent_firsthand_ids(["EV-001", "EV-002", "EV-003", "EV-999"], by_id) == ["EV-001", "EV-002"]

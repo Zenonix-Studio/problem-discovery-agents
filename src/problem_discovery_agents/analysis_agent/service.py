@@ -7,11 +7,11 @@ from typing import Protocol
 
 from ..contracts import (
     Alternative, AnalysisOutput, EvidenceItem, EvidenceRegistry, GapOutcome, Independence,
-    Problem, ResearchOutput, VerificationStatus,
+    Problem, ProblemStatus, ResearchOutput, VerificationStatus,
 )
 from ..research_agent.tools import ResearchTools
 from ..research_tools.models import RetrievalState, SourceRecord
-from ..validation import validate_analysis_output, validate_research_output
+from ..validation import independent_firsthand_ids, validate_analysis_output, validate_research_output
 from .models import AnalysisDiagnostics, AnalysisPlan, AnalysisRunResult, ProblemProposal, SourceSelection
 
 # Provisional per-source text cap for the model's view of a page.
@@ -158,6 +158,21 @@ class AnalysisAgent:
                     gap_outcome=outcome, evidence_ids=ids,
                 ))
             diagnostics.downgraded_alternatives.extend(f"P-{index:03d}: {note}" for note in downgrades)
+            status = proposal.status
+            missing = None
+            if status is ProblemStatus.CORROBORATED and len(independent_firsthand_ids(
+                proposal.evidence_ids, {**research.evidence_registry.by_id(), **{e.evidence_id: e for e in delta}}
+            )) < 2:
+                missing = "fewer than two linked independent firsthand evidence items exist"
+            elif status in {ProblemStatus.OUTDATED, ProblemStatus.CONTRADICTED} and not counter_ids:
+                missing = "no linked counterevidence exists"
+            if missing:
+                # An unsupported status claim is uncertainty, not a failed run.
+                downgrades.append(
+                    f"Status was proposed as {status.value} but {missing}; recorded as needs_validation."
+                )
+                diagnostics.downgraded_statuses.append(f"P-{index:03d}: {downgrades[-1]}")
+                status = ProblemStatus.NEEDS_VALIDATION
             gaps = [*proposal.research_gaps, *downgrades]
             gaps.extend(diagnostics.unsuccessful_searches)
             rejected = [url for url in self._proposal_urls(proposal) if url in diagnostics.rejected_source_urls]
@@ -170,7 +185,7 @@ class AnalysisAgent:
                 evidence_ids=proposal.evidence_ids, independence_context=proposal.independence_context,
                 alternatives=alternatives, counterevidence_ids=counter_ids,
                 current_resolution_uncertainty=proposal.current_resolution_uncertainty,
-                research_gaps=gaps, status=proposal.status,
+                research_gaps=gaps, status=status,
             ))
         return AnalysisOutput(problems=problems, evidence_registry_delta=EvidenceRegistry(evidence=delta))
 

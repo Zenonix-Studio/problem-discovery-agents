@@ -2,12 +2,13 @@
 
 from __future__ import annotations
 
-from collections.abc import Iterable
+from collections.abc import Iterable, Mapping
 
 from .contracts import (
     FIRSTHAND,
     AnalysisOutput,
     EvaluationOutput,
+    EvidenceItem,
     EvidenceRegistry,
     GapOutcome,
     Independence,
@@ -115,13 +116,7 @@ def validate_analysis_output(
         if not problem.status_rationale.strip():
             errors.append(f"Problem {problem.problem_id}.status_rationale must not be blank")
         if problem.status is ProblemStatus.CORROBORATED:
-            independent_firsthand = [
-                evidence_id for evidence_id in problem.evidence_ids
-                if evidence_id in registry.by_id()
-                and registry.by_id()[evidence_id].independence is Independence.INDEPENDENT
-                and registry.by_id()[evidence_id].evidence_class == FIRSTHAND
-            ]
-            if len(independent_firsthand) < 2:
+            if len(independent_firsthand_ids(problem.evidence_ids, registry.by_id())) < 2:
                 errors.append(
                     f"Problem {problem.problem_id} is corroborated but lacks two linked independent firsthand Evidence IDs"
                 )
@@ -147,6 +142,17 @@ def validate_analysis_output(
     if errors:
         raise ContractValidationError(errors)
     return registry
+
+
+def independent_firsthand_ids(evidence_ids: Iterable[str], by_id: Mapping[str, EvidenceItem]) -> list[str]:
+    """The IDs that count toward `corroborated`: independent and firsthand."""
+
+    return [
+        evidence_id for evidence_id in evidence_ids
+        if evidence_id in by_id
+        and by_id[evidence_id].independence is Independence.INDEPENDENT
+        and by_id[evidence_id].evidence_class == FIRSTHAND
+    ]
 
 
 def _validate_assessment(
