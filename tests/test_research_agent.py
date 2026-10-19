@@ -417,3 +417,36 @@ def test_comments_are_not_fetched_when_the_body_was_not_retrieved() -> None:
     record = M3ResearchTools(tavily=_NoTavily(), github_rest=rest).extract([ISSUE])[0]  # type: ignore[arg-type]
     assert rest.comment_calls == []
     assert record.comments_text is None
+
+
+def _hypothesis(text: str) -> CandidateSignal:
+    return CandidateSignal(source_url="https://example.test/source", user_segment="developers", workflow="CI", friction_hypothesis=text, observation="A bounded observation.")
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "Fresh installs can fail when dependency resolution hits a cache miss.",
+        "Installs slow down in production CI runs.",
+        "Developer productivity drops when installs are slow.",
+        "The scoreboard in the CI dashboard is unclear.",
+        "The resolution of the lockfile fails on a cold cache.",
+    ],
+)
+def test_ordinary_technical_words_are_not_solution_language(text: str) -> None:
+    assert _hypothesis(text).friction_hypothesis == text
+
+
+@pytest.mark.parametrize(
+    "text",
+    [
+        "The solution is a product.",
+        "Solutions exist for this problem.",
+        "Users give it a score of 7.",
+        "Validated demand exists for this.",
+        "A PRODUCT would fix the slow installs.",
+    ],
+)
+def test_real_solution_language_is_still_rejected(text: str) -> None:
+    with pytest.raises(ValidationError, match="solution-neutral"):
+        _hypothesis(text)

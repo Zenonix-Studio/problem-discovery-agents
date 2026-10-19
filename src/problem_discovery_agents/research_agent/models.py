@@ -6,6 +6,7 @@ These types describe only request, planning, and in-memory diagnostics.
 
 from __future__ import annotations
 
+import re
 from datetime import date
 
 from pydantic import BaseModel, ConfigDict, Field, field_validator
@@ -15,6 +16,9 @@ from ..contracts import EvidenceClass
 
 PILOT_CATEGORY = "Developer Tools & Productivity"
 
+
+# Whole words only: "resolution", "production" and "scoreboard" are ordinary CI vocabulary.
+_FORBIDDEN_TERMS = re.compile(r"\b(solutions?|products?|scor(?:e|es|ed|ing)|validated demand)\b", re.IGNORECASE)
 
 class _StrictModel(BaseModel):
     model_config = ConfigDict(extra="forbid")
@@ -78,8 +82,7 @@ class CandidateSignal(_StrictModel):
     @field_validator("friction_hypothesis")
     @classmethod
     def _solution_neutral(cls, value: str) -> str:
-        forbidden = ("solution", "product", "score", "validated demand")
-        if any(term in value.lower() for term in forbidden):
+        if _FORBIDDEN_TERMS.search(value):
             raise ValueError("friction_hypothesis must remain solution-neutral and unscored")
         return value
 
