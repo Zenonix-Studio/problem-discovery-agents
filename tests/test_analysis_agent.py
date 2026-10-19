@@ -10,7 +10,7 @@ from problem_discovery_agents.analysis_agent import (
     ProblemProposal, RetrievalIntent, SourceRequest, SourceSelection, create_analysis_crew_agent,
 )
 from problem_discovery_agents.analysis_agent.prompts import ANALYSIS_INSTRUCTIONS, SELECTION_INSTRUCTIONS
-from problem_discovery_agents.analysis_agent.service import CONTEXT_TEXT_CAP
+from problem_discovery_agents.analysis_agent.service import CONTEXT_COMMENTS_CAP, CONTEXT_TEXT_CAP
 from problem_discovery_agents.contracts import (
     EvidenceItem, EvidenceRegistry, Finding, GapOutcome, Independence, ProblemStatus,
     ResearchCoverage, ResearchOutput, VerificationStatus,
@@ -309,3 +309,40 @@ def test_selection_prompt_and_crew_call() -> None:
         _research(), AnalysisPlan(), [{"original_url": "https://example.test/a"}]
     )
     assert selection.urls == ["https://example.test/a"]
+
+
+def test_comments_reach_finalize_under_their_own_cap() -> None:
+    inspected: list[dict[str, object]] = []
+
+    class Spy(Planner):
+        def finalize(self, research, investigation, inspected_sources, context_sources):  # type: ignore[no-untyped-def]
+            inspected.extend(inspected_sources)
+            return super().finalize(research, investigation, inspected_sources, context_sources)
+
+    class WithComments(Tools):
+        def extract(self, urls: list[str]) -> list[SourceRecord]:
+            return [r.model_copy(update={"comments_text": "c" * (CONTEXT_COMMENTS_CAP + 500)}) for r in super().extract(urls)]
+
+    planner = Spy()
+    AnalysisAgent(planner=planner, tools=WithComments()).run(_research())
+    assert planner.context and all(len(str(c["comments"])) == CONTEXT_COMMENTS_CAP for c in planner.context)
+    assert all(len(str(c["text"])) < CONTEXT_TEXT_CAP for c in planner.context)
+    assert inspected and all(len(str(s["comments_text"])) == CONTEXT_COMMENTS_CAP for s in inspected)
+
+
+def test_context_without_comments_has_no_comments_key() -> None:
+    planner = Planner()
+    AnalysisAgent(planner=planner, tools=Tools()).run(_research())
+    assert planner.context and all("comments" not in c for c in planner.context)
+
+
+def test_finalize_prompt_asks_for_the_comment_url() -> None:
+    class Output:
+        pydantic = AnalysisPlan()
+
+    class Agent:
+        def kickoff(self, instructions: str, *, response_format: object) -> Output:
+            assert "comment url" in instructions.lower()
+            return Output()
+
+    CrewAIAnalysisPlanner(Agent()).finalize(_research(), AnalysisPlan(), [], [])

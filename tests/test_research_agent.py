@@ -18,7 +18,10 @@ from problem_discovery_agents.research_agent import (
     create_research_crew_agent,
 )
 from problem_discovery_agents.research_agent.prompts import PASS_ONE_INSTRUCTIONS, PASS_TWO_INSTRUCTIONS, SELECTION_INSTRUCTIONS
+from problem_discovery_agents.research_agent.tools import COMMENT_TEXT_CAP, COMMENTS_TOTAL_CAP
 from problem_discovery_agents.research_tools.models import (
+    CollectionResult,
+    RetrievalError,
     RetrievalState,
     SearchLead,
     SearchResult,
@@ -149,6 +152,9 @@ def test_m3_bridge_prefers_github_for_github_object_urls() -> None:
         def get_issue_or_pull_request(self, owner: str, repository: str, number: int) -> SourceRecord:
             assert (owner, repository, number) == ("owner", "repo", 7)
             return SourceRecord(provider="github", request_kind="issue", requested_url="https://api.github.test/issue/7", canonical_url="https://github.com/owner/repo/issues/7", source_type="issue", text="Reported friction.", author="dev", retrieved_at=NOW, retrieval_state=RetrievalState.COMPLETE)
+
+        def list_issue_comments(self, owner: str, repository: str, number: int, **kwargs: object) -> CollectionResult:
+            return CollectionResult(retrieved_at=NOW, retrieval_state=RetrievalState.COMPLETE)
 
     tools = M3ResearchTools(tavily=Tavily(), github_rest=GitHubRest())  # type: ignore[arg-type]
     records = tools.extract(["https://github.com/owner/repo/issues/7", "https://example.test/page"])
@@ -311,3 +317,103 @@ def test_off_lead_selection_is_rejected_without_extraction() -> None:
     result = ResearchAgent(planner=Planner(), tools=Tools()).run(ResearchRequest(category="Developer Tools & Productivity"))
     assert result.research_output.findings == []
     assert result.diagnostics.rejected_candidate_urls == [rejected_url]
+
+
+ISSUE = "https://github.com/owner/repo/issues/7"
+
+
+def _comment(number: int, text: str = "Workaround: pin the runner image.", author: str = "helper") -> SourceRecord:
+    return SourceRecord(provider="github", request_kind="issue_comment", requested_url="https://api.github.test/comments", canonical_url=f"{ISSUE}#issuecomment-{number}", source_type="issue_comment", text=text, author=author, created_at=NOW, retrieved_at=NOW, retrieval_state=RetrievalState.COMPLETE)
+
+
+class _NoTavily:
+    def search(self, query: str) -> SearchResult:
+        raise AssertionError("not used")
+
+    def extract(self, urls: list[str]) -> list[SourceRecord]:
+        raise AssertionError("not used")
+
+
+class _Rest:
+    def __init__(self, comments: CollectionResult | Exception, *, body: str | None = "Reported friction.") -> None:
+        self.comments = comments
+        self.body = body
+        self.comment_calls: list[int] = []
+
+    def get_issue_or_pull_request(self, owner: str, repository: str, number: int) -> SourceRecord:
+        return SourceRecord(provider="github", request_kind="issue", requested_url="https://api.github.test/issue/7", canonical_url=ISSUE, source_type="issue", text=self.body, retrieved_at=NOW, retrieval_state=RetrievalState.COMPLETE if self.body else RetrievalState.FAILED)
+
+    def list_issue_comments(self, owner: str, repository: str, number: int, **kwargs: object) -> CollectionResult:
+        self.comment_calls.append(number)
+        if isinstance(self.comments, Exception):
+            raise self.comments
+        return self.comments
+
+
+def _collection(*items: SourceRecord) -> CollectionResult:
+    return CollectionResult(items=list(items), retrieved_at=NOW, retrieval_state=RetrievalState.COMPLETE)
+
+
+def test_issue_comments_reach_comments_text_and_body_is_unchanged() -> None:
+    rest = _Rest(_collection(_comment(1), _comment(2, "It was fixed in v2.", "maintainer")))
+    record = M3ResearchTools(tavily=_NoTavily(), github_rest=rest).extract([ISSUE])[0]  # type: ignore[arg-type]
+
+    assert record.text == "Reported friction."
+    assert record.comments_text is not None
+    assert f"[helper, 2026-10-15, {ISSUE}#issuecomment-1]" in record.comments_text
+    assert "Workaround: pin the runner image." in record.comments_text
+    assert record.comments_text.index("issuecomment-1") < record.comments_text.index("issuecomment-2")
+    assert record.limitations == []
+
+
+def test_pull_request_url_uses_the_issue_comments_call() -> None:
+    rest = _Rest(_collection(_comment(1)))
+    M3ResearchTools(tavily=_NoTavily(), github_rest=rest).extract(["https://github.com/owner/repo/pull/7"])  # type: ignore[arg-type]
+    assert rest.comment_calls == [7]
+
+
+def test_discussion_comments_reach_comments_text() -> None:
+    class Discussions:
+        def get_discussion(self, owner: str, repository: str, number: int, **kwargs: object) -> CollectionResult:
+            body = SourceRecord(provider="github", request_kind="discussion", requested_url="https://github.com/owner/repo/discussions/3", canonical_url="https://github.com/owner/repo/discussions/3", text="Question body.", retrieved_at=NOW, retrieval_state=RetrievalState.COMPLETE)
+            return CollectionResult(items=[_comment(9, "Accepted answer: use the cache key.")], primary_source=body, retrieved_at=NOW, retrieval_state=RetrievalState.COMPLETE)
+
+    record = M3ResearchTools(tavily=_NoTavily(), github_discussions=Discussions()).extract(["https://github.com/owner/repo/discussions/3"])[0]  # type: ignore[arg-type]
+    assert record.text == "Question body."
+    assert record.comments_text is not None and "Accepted answer: use the cache key." in record.comments_text
+
+
+@pytest.mark.parametrize(
+    "failure",
+    [
+        CollectionResult(retrieved_at=NOW, retrieval_state=RetrievalState.INACCESSIBLE, error=RetrievalError(provider="github", category="forbidden", message="Forbidden.")),
+        ValueError("Provider returned invalid JSON for a required list response."),
+    ],
+)
+def test_failed_comment_fetch_keeps_the_body_and_records_a_limitation(failure: CollectionResult | Exception) -> None:
+    record = M3ResearchTools(tavily=_NoTavily(), github_rest=_Rest(failure)).extract([ISSUE])[0]  # type: ignore[arg-type]
+    assert record.text == "Reported friction."
+    assert record.comments_text is None
+    assert any("could not be retrieved" in item for item in record.limitations)
+
+
+def test_comment_budget_truncates_and_states_what_was_omitted() -> None:
+    rest = _Rest(_collection(*(_comment(n, "x" * (COMMENT_TEXT_CAP + 500)) for n in range(1, 13))))
+    record = M3ResearchTools(tavily=_NoTavily(), github_rest=rest).extract([ISSUE])[0]  # type: ignore[arg-type]
+
+    assert record.comments_text is not None and len(record.comments_text) <= COMMENTS_TOTAL_CAP
+    assert any("cut to" in item for item in record.limitations)
+    assert any("omitted" in item for item in record.limitations)
+
+
+def test_no_comments_means_no_comments_text_and_no_extra_limitation() -> None:
+    record = M3ResearchTools(tavily=_NoTavily(), github_rest=_Rest(_collection())).extract([ISSUE])[0]  # type: ignore[arg-type]
+    assert record.comments_text is None
+    assert record.limitations == []
+
+
+def test_comments_are_not_fetched_when_the_body_was_not_retrieved() -> None:
+    rest = _Rest(_collection(_comment(1)), body=None)
+    record = M3ResearchTools(tavily=_NoTavily(), github_rest=rest).extract([ISSUE])[0]  # type: ignore[arg-type]
+    assert rest.comment_calls == []
+    assert record.comments_text is None

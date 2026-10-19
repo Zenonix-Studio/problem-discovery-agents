@@ -56,7 +56,9 @@ class CrewAIAnalysisPlanner:
             f"Fuller text of existing evidence (cite by evidence_id in evidence_ids): {context_sources}\n"
             "Now produce the final AnalysisPlan. Classify alternatives, resolution, and status "
             "only from the supplied inspected records, existing-evidence text and linked prior evidence; "
-            "retain gaps otherwise. Put source_urls and counterevidence_sources only for inspected source "
+            "retain gaps otherwise. Comments, when present, are under 'comments' (or 'comments_text') "
+            "with each comment's URL; when a resolution or workaround comes from a comment, name that "
+            "comment URL in the text and claim nothing the supplied comments do not show. Put source_urls and counterevidence_sources only for inspected source "
             "records, never for existing evidence.",
             response_format=AnalysisPlan,
         )

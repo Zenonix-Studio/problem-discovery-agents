@@ -16,6 +16,8 @@ from .models import AnalysisDiagnostics, AnalysisPlan, AnalysisRunResult, Proble
 
 # Provisional per-source text cap for the model's view of a page.
 CONTEXT_TEXT_CAP = 4000
+# Comments get their own provisional cap so a long body cannot crowd out the thread.
+CONTEXT_COMMENTS_CAP = 12000
 
 
 class AnalysisPlanner(Protocol):
@@ -57,7 +59,8 @@ class AnalysisAgent:
         records = self._inspect([*new_urls, *context_urls])
         new_records = {url: records[url] for url in new_urls if url in records}
         context = [
-            {"evidence_id": evidence_id, "requested_url": url, "text": records[url].text[:CONTEXT_TEXT_CAP]}
+            {"evidence_id": evidence_id, "requested_url": url, "text": records[url].text[:CONTEXT_TEXT_CAP],
+             **({"comments": records[url].comments_text[:CONTEXT_COMMENTS_CAP]} if records[url].comments_text else {})}
             for url, evidence_id in context_urls.items() if url in records and records[url].text
         ]
         plan = self._planner.finalize(
@@ -174,6 +177,8 @@ def _capped(record: SourceRecord) -> dict[str, object]:
     data = record.model_dump(mode="json")
     if data.get("text"):
         data["text"] = data["text"][:CONTEXT_TEXT_CAP]
+    if data.get("comments_text"):
+        data["comments_text"] = data["comments_text"][:CONTEXT_COMMENTS_CAP]
     return data
 
 

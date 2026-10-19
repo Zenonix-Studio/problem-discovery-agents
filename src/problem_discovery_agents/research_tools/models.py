@@ -54,6 +54,7 @@ class SourceRecord(BaseModel):
     source_type: str | None = None
     title: str | None = None
     text: str | None = None
+    comments_text: str | None = None
     author: str | None = None
     created_at: datetime | None = None
     updated_at: datetime | None = None
